@@ -2,18 +2,21 @@ import noise
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import axes3d
+from random import random
 
 shape = (500,500)
 scale = 200.0
 octaves = 6
 persistence = 0.5
 lacunarity = 2.0
+z = random() * scale
 
 world = np.zeros(shape)
 for i in range(shape[0]):
     for j in range(shape[1]):
-        world[i][j] = noise.pnoise2(i/scale, 
-                                    j/scale, 
+        world[i][j] = noise.pnoise3(i/scale, 
+                                    j/scale,
+                                    z,
                                     octaves=octaves, 
                                     persistence=persistence, 
                                     lacunarity=lacunarity, 
