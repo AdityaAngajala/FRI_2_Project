@@ -7,6 +7,7 @@ import noise
 
 land_size = 120
 
+
 def generate_hill(radius, max_height, cy, cx, land):
     for x in range(land_size):
         for y in range(land_size):
@@ -17,27 +18,30 @@ def generate_hill(radius, max_height, cy, cx, land):
             if distance <= radius:
                 land[x, y] += max_height * ((radius - distance) / radius)
 
+
 def generate_noise(scale=0.5, noise_freq=60.0, octaves=6, persistence=0.5, lacunarity=2.0):
     z = random.random() * land_size
     terrain_noise = np.zeros((land_size, land_size))
     for x in range(land_size):
         for y in range(land_size):
-            terrain_noise[x][y] = noise.pnoise3(x / noise_freq, 
+            terrain_noise[x][y] = noise.pnoise3(x / noise_freq,
                                                 y / noise_freq,
                                                 z / noise_freq,
                                                 octaves=octaves,
-                                                persistence=persistence, 
-                                                lacunarity=lacunarity, 
-                                                repeatx=1024, 
-                                                repeaty=1024, 
+                                                persistence=persistence,
+                                                lacunarity=lacunarity,
+                                                repeatx=1024,
+                                                repeaty=1024,
                                                 base=42)
             terrain_noise[x][y] = (terrain_noise[x][y] + 1.0) * scale
 
     print(np.max(terrain_noise))
     return terrain_noise
 
+
 def round_to_interval(value, interval):
     return interval * round(value / interval)
+
 
 if __name__ == '__main__':
     land = np.zeros((land_size, land_size))
@@ -47,7 +51,7 @@ if __name__ == '__main__':
     generate_hill(30, 1.0, 20, 10, land)
     generate_hill(30, 1.0, 75, 90, land)
     land = land / np.max(land)
-    
+
     land += generate_noise()
     land = land / np.max(land) * 255
 
@@ -60,11 +64,15 @@ if __name__ == '__main__':
 
     # Add hover annotations
     cursor = mplcursors.cursor(im, hover=True)
+
+
     @cursor.connect("add")
     def on_add(sel):
         x, y = int(sel.target[0]), int(sel.target[1])
         value = land[x][y]
         sel.annotation.set_text(f'Value: {value}')
+
+
     plt.show()
 
     lin_x = np.linspace(0, 1, land_size, endpoint=False)
