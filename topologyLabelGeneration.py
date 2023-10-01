@@ -10,8 +10,8 @@ import math
 
 land_size = 128
 land = np.zeros((land_size, land_size))
-posXOptions = ["Left", "Center", "Right"]
-posYOptions = ["Top", "Middle", "Bottom"]
+posXOptions = ["left", "center", "right"]
+posYOptions = ["top", "middle", "bottom"]
 
 
 def generate_hill(radius, max_height, cy, cx):
@@ -67,9 +67,13 @@ def linear_scaling(distance, radius):
 def quadratic_scaling(distance, radius):
     return 1 - ((distance / radius) ** 2)
 
+def rand_coord_from_quad(quad):
+    quad_size = land_size // 3
+    return random.randint(-quad_size // 3, quad_size // 3) + (quad * quad_size + quad_size // 2)
 
-def gen_rand_attributes(radius_min=10, radius_max=30, min_height=50, max_height=90):
-    random_coord = random.randint(0, land_size - 1), random.randint(0, land_size - 1)
+def gen_rand_attributes(quad_x, quad_y, radius_min=10, radius_max=30, min_height=50, max_height=90):
+    # random_coord = random.randint(0, land_size - 1), random.randint(0, land_size - 1)
+    random_coord = rand_coord_from_quad(quad_x), rand_coord_from_quad(quad_y)
     random_radius = random.randint(radius_min, radius_max)
     random_height = random.randint(min_height, max_height)
     return random_coord, random_radius, random_height
@@ -155,26 +159,36 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3,
     land = np.zeros((land_size, land_size))
 
     land += generate_noise()
-    land = land / np.max(np.abs(land)) * 50
+    land = land / np.max(np.abs(land)) * 40
 
     hillCount = random.randint(min_hills, max_hills)
     basinCount = random.randint(min_basins, max_basins)
 
     f = open('labels/' + str(name) + ".txt", "w")
 
-    for _ in range(hillCount):
-        rand_coord, randomRadius, randomHeight = gen_rand_attributes()
-        generate_hill(randomRadius, randomHeight, rand_coord[0], rand_coord[1])
-        posX, posY = set_poses(rand_coord)
+    taken = [*range(9)]
 
-        f.write("There is a Hill in the " + str(posY) + "-" + str(posX) + "\n")
+    for _ in range(hillCount):
+        rand_idx = random.randrange(len(taken))
+        rand_quad = taken[rand_idx]
+        taken.pop(rand_idx)
+        quad_x, quad_y = rand_quad // 3, rand_quad % 3
+        rand_coord, randomRadius, randomHeight = gen_rand_attributes(quad_x, quad_y)
+        generate_hill(randomRadius, randomHeight, rand_coord[0], rand_coord[1])
+        posX, posY = posXOptions[quad_x], posYOptions[quad_y]
+
+        f.write("There is a hill in the " + str(posY) + "-" + str(posX) + "\n")
 
     for _ in range(basinCount):
-        rand_coord, randomRadius, randomHeight = gen_rand_attributes()
+        rand_idx = random.randrange(len(taken))
+        rand_quad = taken[rand_idx]
+        taken.pop(rand_idx)
+        quad_x, quad_y = rand_quad // 3, rand_quad % 3
+        rand_coord, randomRadius, randomHeight = gen_rand_attributes(quad_x, quad_y)
         generate_basin(randomRadius, randomHeight, rand_coord[0], rand_coord[1])
-        posX, posY = set_poses(rand_coord)
+        posX, posY = posXOptions[quad_x], posYOptions[quad_y]
 
-        f.write("There is a Basin in the " + str(posY) + "-" + str(posX)+ "\n")
+        f.write("There is a basin in the " + str(posY) + "-" + str(posX)+ "\n")
 
     f.close()
 
