@@ -3,20 +3,30 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 import mplcursors
 import numpy as np
-from mpl_toolkits.mplot3d import axes3d
 import noise
 import cv2
 import math
+import pickle
 
-land_size = 128
-land = np.zeros((land_size, land_size))
-posXOptions = ["left", "center", "right"]
-posYOptions = ["top", "middle", "bottom"]
+
+class Const:
+    LAND_SIZE = 128
+    MIN_ELEVATION = -192
+    MAX_ELEVATION = 191
+    NUM_INTERVALS = 24
+    NUM_VALS_PER_INTERVAL = math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
+
+
+posXOptions = ["Left", "Center", "Right"]
+posYOptions = ["Top", "Middle", "Bottom"]
+colorOptions = []
+colorOutput = []
+land: np.ndarray
 
 
 def generate_hill(radius, max_height, cy, cx):
-    for x in range(land_size):
-        for y in range(land_size):
+    for x in range(max(0, int(cx - radius)), min(Const.LAND_SIZE, int(cx + radius))):
+        for y in range(max(0, int(cy - radius)), min(Const.LAND_SIZE, int(cy + radius))):
             # Calculate the distance from the current point to the center
             distance = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
 
@@ -26,8 +36,8 @@ def generate_hill(radius, max_height, cy, cx):
 
 
 def generate_basin(radius, max_height, cy, cx):
-    for x in range(land_size):
-        for y in range(land_size):
+    for x in range(max(0, int(cx - radius)), min(Const.LAND_SIZE, int(cx + radius))):
+        for y in range(max(0, int(cy - radius)), min(Const.LAND_SIZE, int(cy + radius))):
             # Calculate the distance from the current point to the center
             distance = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
 
@@ -37,10 +47,10 @@ def generate_basin(radius, max_height, cy, cx):
 
 
 def generate_noise(noise_freq=60.0, octaves=6, persistence=0.5, lacunarity=2.0):
-    z = random.random() * land_size
-    terrain_noise = np.zeros((land_size, land_size))
-    for x in range(land_size):
-        for y in range(land_size):
+    z = random.random() * Const.LAND_SIZE
+    terrain_noise = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE))
+    for x in range(Const.LAND_SIZE):
+        for y in range(Const.LAND_SIZE):
             terrain_noise[x][y] = noise.pnoise3(x / noise_freq,
                                                 y / noise_freq,
                                                 z / noise_freq,
@@ -68,7 +78,7 @@ def quadratic_scaling(distance, radius):
     return 1 - ((distance / radius) ** 2)
 
 def rand_coord_from_quad(quad):
-    quad_size = land_size // 3
+    quad_size = Const.LAND_SIZE // 3
     return random.randint(-quad_size // 3, quad_size // 3) + (quad * quad_size + quad_size // 2)
 
 def gen_rand_attributes(quad_x, quad_y, radius_min=10, radius_max=30, min_height=50, max_height=90):
@@ -80,25 +90,83 @@ def gen_rand_attributes(quad_x, quad_y, radius_min=10, radius_max=30, min_height
 
 
 def set_poses(random_coord):
-    return posXOptions[int(random_coord[0] // (land_size / 3))], posYOptions[int(random_coord[1] // (land_size / 3))]
+    return posXOptions[int(random_coord[0] // (Const.LAND_SIZE / 3))], \
+        posYOptions[int(random_coord[1] // (Const.LAND_SIZE / 3))]
 
 
-def original_2d_vis(name):
-    #plt.rcParams['figure.dpi'] = 12
+def initialize_colors(pastel=False):
+    global colorOptions, colorOutput
+
+    if pastel:
+        # Start with a base of 20 colors, then add 4 more
+        cmap = plt.get_cmap('tab20')
+        colorOptions = cmap.colors
+        colorOptions += 'darkblue', 'black', 'maroon', 'white'
+
+        # Convert to a colormap in RGBA format
+        cmap = colors.ListedColormap(colorOptions)
+        colorOptions = colors.ListedColormap(cmap(np.linspace(0, 1, cmap.N))).colors
+
+    else:
+        # Start with a base of 20 colors taken from the nipy_spectral colormap, then add 6 more colors to the base
+        cmap = colors.ListedColormap(plt.get_cmap('nipy_spectral')(np.linspace(0, 1, 20)))
+        cmap2 = colors.ListedColormap(
+            colors.ListedColormap(['chocolate', 'darkgreen', 'maroon',
+                                   'slategray', 'fuchsia', 'hotpink', 'indigo'])(np.linspace(0, 1, 7)))
+        colorOptions = np.concatenate([cmap.colors, cmap2.colors])
+
+        # Remove the colors that are too similar to each other and shuffle the list
+        colorOptions = list(colorOptions)
+        colorOptions.pop(10)
+        colorOptions.pop(11)
+        colorOptions.pop(12)
+        random.shuffle(colorOptions)
+
+    cmap = colors.ListedColormap(colorOptions)
+
+    # Convert the colors to RGB values usable by opencv
+    for colorVal in colorOptions:
+        colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
+
+    # Save the colormap to a file
+    gradient = np.linspace(0, 1, 384)
+    gradient = np.vstack((gradient, gradient))
+    _, ax = plt.subplots(1, 1, figsize=(5, 1))
+    ax.imshow(gradient, aspect='auto', cmap=cmap)
+    plt.savefig('images/' + 'colorsPlot.png', bbox_inches='tight', pad_inches=0)
+
+
+def reinitialize_color_order():
+    global colorOutput
+    with open("colordump", "rb") as f:
+        global colorOptions
+        colorOptions = pickle.load(f)
+
+    for colorVal in colorOptions:
+        colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
+
+
+def save_color_order():
+    with open("colordump", "wb") as f:
+        pickle.dump(colorOptions, f)
+
+
+def generate_2d_plot(name, save=False):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.axis('off')
 
-    #bounds = np.arange(0,257,32)
-    #norm = colors.Normalize(vmin=-160, vmax=160)
-    #norm = colors.BoundaryNorm(bounds, 8)
-
-    ax.imshow(land, cmap='terrain')
-    #ax.imshow(land, cmap='plasma', norm=norm)
-
-    cursor = mplcursors.cursor(hover=True)
+    # Create a colormap based on the colorOptions
+    bounds = np.arange(Const.MIN_ELEVATION - 1, Const.MAX_ELEVATION + 1, Const.NUM_VALS_PER_INTERVAL)
+    cmap = colors.ListedColormap(colorOptions)
+    norm = colors.BoundaryNorm(bounds, cmap.N)
+    ax.imshow(land, cmap=cmap, norm=norm)
 
     # Save the image to a file
-    plt.savefig('images/' + str(name) + '.png', bbox_inches='tight', pad_inches=0)
+    if save:
+        plt.savefig('images/' + str(name) + 'Plot.png', bbox_inches='tight', pad_inches=0)
+
+    # Cursor Annotations
+    cursor = mplcursors.cursor(hover=True)
 
     @cursor.connect("add")
     def on_add(sel):
@@ -108,56 +176,38 @@ def original_2d_vis(name):
         text = f"Point: ({x}, {y})\nValue: {value}"
         sel.annotation.set_text(text)
 
-def generate_2d_visualization(name, num_intervals, min_elevation, max_elevation):
-    random_colors = [
-        np.array([67, 185, 147]),
-        np.array([124, 155, 213]),
-        np.array([180, 184, 241]),
-        np.array([87, 56, 39]),
-        np.array([83, 105, 208]),
-        np.array([38, 246, 175]),
-        np.array([26, 20, 31]),
-        np.array([113,  30, 174]),
-        np.array([188, 109, 143]),
-        np.array([36, 216,  26]),
-        np.array([163, 102,  42]),
-        np.array([98, 151, 220]),
-        np.array([20, 144,  44]),
-        np.array([156,  92, 228]),
-        np.array([167,  98, 220]),
-        np.array([21,  92, 3]),
-        np.array([95,  74, 138]),
-        np.array([35,  234, 73]),
-        np.array([92,  64, 54]),
-        np.array([82,  100, 83]),
-        np.array([20,  160, 160]),
-        np.array([34,  234, 56]),
-        np.array([95,  74, 26]),
-        np.array([37,  26, 94])
-    ]
-    num_vals_per_interval = math.ceil((max_elevation - min_elevation + 1) / num_intervals)
-    image = np.zeros((land_size, land_size, 3))
-    for i in range(land_size):
-        for j in range(land_size):
-            # print(int((land[i][j] + abs(min_elevation)) // num_vals_per_interval))
-            image[i][j] = random_colors[int((land[i][j] + abs(min_elevation)) // num_vals_per_interval)]
-    cv2.imwrite('images/' + str(name) + '.png', image)
+
+
+def generate_2d_visualization(name):
+    global colorOutput
+    image = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE, 3))
+    for i in range(Const.LAND_SIZE):
+        for j in range(Const.LAND_SIZE):
+            image[i][j] = colorOutput[int((land[i][j] + abs(Const.MIN_ELEVATION)) // Const.NUM_VALS_PER_INTERVAL)]
+
+    cv2.imwrite('images/' + str(name) + '.png', np.array(image)[..., ::-1])  # Flipping color channel from RGB to BGR
 
 
 def generate_3d_visualization(name):
-    lin_x = np.linspace(0, 1, land_size, endpoint=False)
-    lin_y = np.linspace(0, 1, land_size, endpoint=False)
+    lin_x = np.linspace(0, 1, Const.LAND_SIZE, endpoint=False)
+    lin_y = np.linspace(0, 1, Const.LAND_SIZE, endpoint=False)
     x, y = np.meshgrid(lin_x, lin_y)
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
-    ax.plot_surface(x, y, land, cmap='terrain')
+    ax.plot_surface(y, x, land, cmap='terrain')
     plt.savefig('images/' + str(name) + '_3d_visualisation.png')
-    #plt.show()
+    # plt.close()
+    plt.show()
 
-def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3, min_height=-192, max_height=191, num_intervals=24):
+
+def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3):
     global land
-    land = np.zeros((land_size, land_size))
 
+    # Initialize the land array with zeros
+    land = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE))
+
+    # Generate noise and normalize it before generating the hills and basins
+    # to make it look more natural
     land += generate_noise()
     land = land / np.max(np.abs(land)) * 40
 
@@ -168,6 +218,7 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3,
 
     taken = [*range(9)]
 
+    # Generate hills and save their labels
     for _ in range(hillCount):
         rand_idx = random.randrange(len(taken))
         rand_quad = taken[rand_idx]
@@ -192,16 +243,20 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3,
 
     f.close()
 
-    for i in range(land_size):
-        for j in range(land_size):
-            land[i][j] = round_to_interval(land[i][j], int((max_height - min_height) / num_intervals))
-    land = np.clip(land, min_height, max_height)
-    print("min: ", np.min(land))
-    print("max: ", np.max(land))
+    # Round the heights to the nearest interval and clip them to the given height range
+    for i in range(Const.LAND_SIZE):
+        for j in range(Const.LAND_SIZE):
+            land[i][j] = round_to_interval(land[i][j], Const.NUM_VALS_PER_INTERVAL)
+    land = np.clip(land, Const.MIN_ELEVATION, Const.MAX_ELEVATION)
 
-    generate_2d_visualization(name, num_intervals, min_height, max_height)
-    generate_3d_visualization(name)
+    # Generate and save 2D and 3D visualizations of the terrain
+    generate_2d_visualization(name)
+    # generate_2d_plot(name, save=True)
+    # generate_3d_visualization(name)
+
 
 if __name__ == '__main__':
+    initialize_colors(pastel=False)
     for count in range(10):
         generate_terrain(count)
+    save_color_order()
