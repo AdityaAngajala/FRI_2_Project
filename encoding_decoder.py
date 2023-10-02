@@ -11,6 +11,7 @@ from topologyLabelGeneration import Const
 
 land = []
 colorOptions = []
+colorOptionsHSV = []
 colorOutput = []
 images = []
 
@@ -36,6 +37,9 @@ def reinitialize_color_order():
         global colorOptions
         colorOptions = pickle.load(f)
 
+    for color in colorOptions:
+        colorOptionsHSV.append(colors.rgb_to_hsv(colors.to_rgb(color)))
+
     for colorVal in colorOptions:
         colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
 
@@ -52,8 +56,22 @@ def extract_data(image):
 def color_to_values_index(color):
     global colorOutput
     color = np.flip(color)  # BGR to RGB
+    round_to_initialized_colors(color)
     return colorOutput.index(tuple(color))
 
+def round_to_initialized_colors(input_color, hsv=False):
+    global colorOptions, colorOptionsHSV
+    if hsv:
+        colorOptionChoice = colorOptionsHSV
+    else:
+        colorOptionChoice = colorOptions
+
+    distances = []
+    for color in colorOptionChoice:
+        distances.append((color[0] - input_color[0]) ** 2 +
+                         (color[1] - input_color[1]) ** 2 +
+                         (color[2] - input_color[2]) ** 2)
+    return colors.to_rgb(colorOptions[(distances.index(min(distances)))])
 
 def generate_2d_plot(name, save=False):
     fig, ax = plt.subplots(figsize=(8, 8))
