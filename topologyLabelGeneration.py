@@ -116,7 +116,7 @@ def initialize_colors(pastel=False):
         colorOptions.pop(10)
         colorOptions.pop(11)
         colorOptions.pop(12)
-        #$random.shuffle(colorOptions)
+        random.shuffle(colorOptions)
 
     cmap = colors.ListedColormap(colorOptions)
 
@@ -235,9 +235,9 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
     land = np.clip(land, Const.MIN_ELEVATION, Const.MAX_ELEVATION)
 
     # Generate and save 2D and 3D visualizations of the terrain
-    # generate_2d_visualization(name)
-    generate_2d_plot(name, save=True)
-    generate_3d_visualization(name)
+    generate_2d_visualization(name)
+    # generate_2d_plot(name, save=True)
+    # generate_3d_visualization(name)
 
 
 if __name__ == '__main__':
