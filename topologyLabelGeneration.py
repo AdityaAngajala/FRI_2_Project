@@ -7,6 +7,7 @@ import noise
 import cv2
 import math
 import pickle
+import re
 
 
 class Const:
@@ -17,10 +18,15 @@ class Const:
     NUM_VALS_PER_INTERVAL = math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
 
 
-posXOptions = ["Left", "Center", "Right"]
-posYOptions = ["Top", "Middle", "Bottom"]
+posXOptions = ["left", "center", "right"]
+posYOptions = ["top", "middle", "bottom"]
 colorOptions = []
 colorOutput = []
+basinHeightOptions = ["shallow", "", "deep"]
+hillHeightOptions = ["short", "", "tall"]
+widthOptions = ["narrow", "", "wide"]
+
+
 land: np.ndarray
 
 
@@ -77,15 +83,14 @@ def linear_scaling(distance, radius):
 def quadratic_scaling(distance, radius):
     return 1 - ((distance / radius) ** 2)
 
-def rand_coord_from_quad(quad):
-    quad_size = Const.LAND_SIZE // 3
-    return random.randint(-quad_size // 3, quad_size // 3) + (quad * quad_size + quad_size // 2)
+def generate_rand_from_levels(min_val, max_val, level, num_levels, padding_ratio):
+    range_per_level = (max_val - min_val) // num_levels
+    return random.randint(0, int(range_per_level * (1 - 2 * padding_ratio))) + int((level + padding_ratio) * range_per_level) + min_val
 
-def gen_rand_attributes(quad_x, quad_y, radius_min=10, radius_max=30, min_height=50, max_height=90):
-    # random_coord = random.randint(0, land_size - 1), random.randint(0, land_size - 1)
-    random_coord = rand_coord_from_quad(quad_x), rand_coord_from_quad(quad_y)
-    random_radius = random.randint(radius_min, radius_max)
-    random_height = random.randint(min_height, max_height)
+def gen_rand_attributes(quad_x, quad_y, height_opt, width_opt, radius_min=10, radius_max=30, min_height=50, max_height=90):
+    random_coord = generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_x, 3, 1 / 3), generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_y, 3, 1 / 3)
+    random_radius = generate_rand_from_levels(radius_min, radius_max, width_opt, len(widthOptions), 0.1)
+    random_height = generate_rand_from_levels(min_height, max_height, height_opt, len(hillHeightOptions), 0.1)
     return random_coord, random_radius, random_height
 
 
@@ -197,8 +202,24 @@ def generate_3d_visualization(name):
     ax.plot_surface(y, x, land, cmap='terrain')
     plt.savefig('images/' + str(name) + '_3d_visualisation.png')
     # plt.close()
-    plt.show()
+    # plt.show()
 
+
+def generate_feature(generator, height_opt_arr, taken, f, name):
+    rand_idx = random.randrange(len(taken))
+    rand_quad = taken[rand_idx]
+    taken.pop(rand_idx)
+    quad_x, quad_y = rand_quad // 3, rand_quad % 3
+    height_opt = random.randrange(len(hillHeightOptions))
+    width_opt = random.randrange(len(widthOptions))
+    rand_coord, randomRadius, randomHeight = gen_rand_attributes(quad_x, quad_y, height_opt, width_opt)
+    generator(randomRadius, randomHeight, rand_coord[0], rand_coord[1])
+    posX, posY = posXOptions[quad_x], posYOptions[quad_y]
+    label = f"There is a {height_opt_arr[height_opt]}, {widthOptions[width_opt]} {name} in the {posY}-{posX}"
+    label = re.sub(" , ", ' ', label)
+    label = re.sub(",  ", ' ', label)
+    label = re.sub(r'\s{2,}', ' ', label)
+    f.write(label + '\n')
 
 def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3):
     global land
@@ -209,7 +230,7 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
     # Generate noise and normalize it before generating the hills and basins
     # to make it look more natural
     land += generate_noise()
-    land = land / np.max(np.abs(land)) * 40
+    land = land / np.max(np.abs(land)) * 30
 
     hillCount = random.randint(min_hills, max_hills)
     basinCount = random.randint(min_basins, max_basins)
@@ -220,26 +241,10 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
 
     # Generate hills and save their labels
     for _ in range(hillCount):
-        rand_idx = random.randrange(len(taken))
-        rand_quad = taken[rand_idx]
-        taken.pop(rand_idx)
-        quad_x, quad_y = rand_quad // 3, rand_quad % 3
-        rand_coord, randomRadius, randomHeight = gen_rand_attributes(quad_x, quad_y)
-        generate_hill(randomRadius, randomHeight, rand_coord[0], rand_coord[1])
-        posX, posY = posXOptions[quad_x], posYOptions[quad_y]
-
-        f.write("There is a hill in the " + str(posY) + "-" + str(posX) + "\n")
+        generate_feature(generate_hill, hillHeightOptions, taken, f, "hill")
 
     for _ in range(basinCount):
-        rand_idx = random.randrange(len(taken))
-        rand_quad = taken[rand_idx]
-        taken.pop(rand_idx)
-        quad_x, quad_y = rand_quad // 3, rand_quad % 3
-        rand_coord, randomRadius, randomHeight = gen_rand_attributes(quad_x, quad_y)
-        generate_basin(randomRadius, randomHeight, rand_coord[0], rand_coord[1])
-        posX, posY = posXOptions[quad_x], posYOptions[quad_y]
-
-        f.write("There is a basin in the " + str(posY) + "-" + str(posX)+ "\n")
+        generate_feature(generate_basin, basinHeightOptions, taken, f, "basin")
 
     f.close()
 
@@ -252,7 +257,7 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
     # Generate and save 2D and 3D visualizations of the terrain
     generate_2d_visualization(name)
     # generate_2d_plot(name, save=True)
-    # generate_3d_visualization(name)
+    generate_3d_visualization(name)
 
 
 if __name__ == '__main__':
