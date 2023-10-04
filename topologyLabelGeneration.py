@@ -26,7 +26,6 @@ basinHeightOptions = ["shallow", "", "deep"]
 hillHeightOptions = ["short", "", "tall"]
 widthOptions = ["narrow", "", "wide"]
 
-
 land: np.ndarray
 
 
@@ -83,12 +82,16 @@ def linear_scaling(distance, radius):
 def quadratic_scaling(distance, radius):
     return 1 - ((distance / radius) ** 2)
 
+
 def generate_rand_from_levels(min_val, max_val, level, num_levels, padding_ratio):
     range_per_level = (max_val - min_val) // num_levels
-    return random.randint(0, int(range_per_level * (1 - 2 * padding_ratio))) + int((level + padding_ratio) * range_per_level) + min_val
+    return random.randint(0, int(range_per_level * (1 - 2 * padding_ratio))) + int(
+        (level + padding_ratio) * range_per_level) + min_val
+
 
 def gen_rand_attributes(quad_x, quad_y, height_opt, width_opt, radius_min=10, radius_max=30, min_height=50, max_height=90):
-    random_coord = generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_x, 3, 1 / 3), generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_y, 3, 1 / 3)
+    random_coord = generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_x, 3, 1 / 3), \
+        generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_y, 3, 1 / 3)
     random_radius = generate_rand_from_levels(radius_min, radius_max, width_opt, len(widthOptions), 0.1)
     random_height = generate_rand_from_levels(min_height, max_height, height_opt, len(hillHeightOptions), 0.1)
     return random_coord, random_radius, random_height
@@ -150,6 +153,15 @@ def reinitialize_color_order():
     for colorVal in colorOptions:
         colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
 
+    cmap = colors.ListedColormap(colorOptions)
+
+    # Save the colormap to a file
+    gradient = np.linspace(0, 1, 384)
+    gradient = np.vstack((gradient, gradient))
+    fig, ax = plt.subplots(1, 1, figsize=(5, 1))
+    ax.imshow(gradient, aspect='auto', cmap=cmap)
+    plt.savefig('images/' + 'colorsPlot.png', bbox_inches='tight', pad_inches=0)
+
 
 def save_color_order():
     with open("colordump", "wb") as f:
@@ -180,7 +192,6 @@ def generate_2d_plot(name, save=False):
         value = land[y][x]
         text = f"Point: ({x}, {y})\nValue: {value}"
         sel.annotation.set_text(text)
-
 
 
 def generate_2d_visualization(name):
@@ -221,6 +232,7 @@ def generate_feature(generator, height_opt_arr, taken, f, name):
     label = re.sub(r'\s{2,}', ' ', label)
     f.write(label + '\n')
 
+
 def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3):
     global land
 
@@ -257,7 +269,7 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
     # Generate and save 2D and 3D visualizations of the terrain
     generate_2d_visualization(name)
     # generate_2d_plot(name, save=True)
-    generate_3d_visualization(name)
+    # generate_3d_visualization(name)
 
 
 if __name__ == '__main__':

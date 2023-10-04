@@ -44,8 +44,6 @@ def reinitialize_color_order():
         colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
 
 
-
-
 def extract_data(image):
     values = np.arange(Const.MIN_ELEVATION, Const.MAX_ELEVATION + 1, Const.NUM_VALS_PER_INTERVAL)
     for i in range(Const.LAND_SIZE):
@@ -54,15 +52,16 @@ def extract_data(image):
 
 
 def color_to_values_index(color):
-    global colorOutput
     color = np.flip(color)  # BGR to RGB
-    round_to_initialized_colors(color)
-    return colorOutput.index(tuple(color))
+    color = [(x / 255) for x in color]  # to Matplot Scheme
+    return get_index_of_closest_color(color)
 
-def round_to_initialized_colors(input_color, hsv=False):
+
+def get_index_of_closest_color(input_color, hsv=False):
     global colorOptions, colorOptionsHSV
     if hsv:
         colorOptionChoice = colorOptionsHSV
+        input_color = colors.rgb_to_hsv(input_color)
     else:
         colorOptionChoice = colorOptions
 
@@ -71,14 +70,15 @@ def round_to_initialized_colors(input_color, hsv=False):
         distances.append((color[0] - input_color[0]) ** 2 +
                          (color[1] - input_color[1]) ** 2 +
                          (color[2] - input_color[2]) ** 2)
-    return colors.to_rgb(colorOptions[(distances.index(min(distances)))])
+    return distances.index(min(distances))
+
 
 def generate_2d_plot(name, save=False):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.axis('off')
 
     # Create a colormap based on the colorOptions
-    bounds = np.arange(Const.MIN_ELEVATION, Const.MAX_ELEVATION + 1, Const.NUM_VALS_PER_INTERVAL)
+    bounds = np.arange(Const.MIN_ELEVATION - 1, Const.MAX_ELEVATION + 1, Const.NUM_VALS_PER_INTERVAL)
     cmap = colors.ListedColormap(colorOptions)
     norm = colors.BoundaryNorm(bounds, cmap.N)
     ax.imshow(land, cmap=cmap, norm=norm)
@@ -120,4 +120,4 @@ if __name__ == '__main__':
     for file in images:
         extract_data(file)
         generate_2d_plot("output", save=True)
-        generate_3d_visualization("output")
+        #generate_3d_visualization("output")
