@@ -11,7 +11,7 @@ import re
 
 
 class Const:
-    LAND_SIZE = 128
+    LAND_SIZE = 512
     MIN_ELEVATION = -192
     MAX_ELEVATION = 191
     NUM_INTERVALS = 24
@@ -89,7 +89,7 @@ def generate_rand_from_levels(min_val, max_val, level, num_levels, padding_ratio
         (level + padding_ratio) * range_per_level) + min_val
 
 
-def gen_rand_attributes(quad_x, quad_y, height_opt, width_opt, radius_min=10, radius_max=30, min_height=50, max_height=90):
+def gen_rand_attributes(quad_x, quad_y, height_opt, width_opt, radius_min=20, radius_max=100, min_height=50, max_height=120):
     random_coord = generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_x, 3, 1 / 3), \
         generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_y, 3, 1 / 3)
     random_radius = generate_rand_from_levels(radius_min, radius_max, width_opt, len(widthOptions), 0.1)
@@ -269,7 +269,7 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
     # Generate and save 2D and 3D visualizations of the terrain
     generate_2d_visualization(name)
     # generate_2d_plot(name, save=True)
-    # generate_3d_visualization(name)
+    generate_3d_visualization(name)
 
 
 if __name__ == '__main__':
