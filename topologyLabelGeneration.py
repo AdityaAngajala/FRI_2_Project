@@ -248,6 +248,7 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
     basinCount = random.randint(min_basins, max_basins)
 
     f = open('labels/' + str(name) + ".txt", "w")
+    f.write("hbEncStyle\n")
 
     taken = [*range(9)]
 
@@ -257,6 +258,9 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
 
     for _ in range(basinCount):
         generate_feature(generate_basin, basinHeightOptions, taken, f, "basin")
+    
+    if hillCount == 0 and basinCount == 0:
+        f.write("There are no features.\n")
 
     f.close()
 
@@ -269,11 +273,11 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
     # Generate and save 2D and 3D visualizations of the terrain
     generate_2d_visualization(name)
     # generate_2d_plot(name, save=True)
-    generate_3d_visualization(name)
+    # generate_3d_visualization(name)
 
 
 if __name__ == '__main__':
     initialize_colors(pastel=False)
-    for count in range(10):
+    for count in range(100):
         generate_terrain(count)
     save_color_order()
