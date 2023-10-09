@@ -46,15 +46,32 @@ def reinitialize_color_order():
 
 def extract_data(image):
     values = np.arange(Const.MIN_ELEVATION, Const.MAX_ELEVATION + 1, Const.NUM_VALS_PER_INTERVAL)
+
+    size = Const.LAND_SIZE * Const.UPSCALE
+    image_mpl = np.zeros((size, size, 3))
+
+    for i in range(size):
+        for j in range(size):
+            image_mpl[i][j] = cv2_to_mpl(image[i][j])
+
+    image_downscale = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE, 3))
+
+    for a in range(Const.UPSCALE):
+        for b in range(Const.UPSCALE):
+            image_downscale += image_mpl[a::Const.UPSCALE, b::Const.UPSCALE]
+
+    # Divide by 'upscale^2' to get the average value for each block
+    image_downscale /= (Const.UPSCALE ** 2)
+
     for i in range(Const.LAND_SIZE):
         for j in range(Const.LAND_SIZE):
-            land[i][j] = values[color_to_values_index(image[i][j])]
+            land[i][j] = values[get_index_of_closest_color(image_downscale[i][j])]
 
 
-def color_to_values_index(color):
+def cv2_to_mpl(color):
     color = np.flip(color)  # BGR to RGB
     color = [(x / 255) for x in color]  # to Matplot Scheme
-    return get_index_of_closest_color(color)
+    return color
 
 
 def get_index_of_closest_color(input_color, hsv=False):
@@ -120,4 +137,4 @@ if __name__ == '__main__':
     for file in images:
         extract_data(file)
         generate_2d_plot("output", save=True)
-        #generate_3d_visualization("output")
+        generate_3d_visualization("output")

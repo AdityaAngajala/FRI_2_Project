@@ -89,7 +89,7 @@ def round_color_hsv(input_color_array):
 
 
 def reinitialize_color_order():
-    with open("colordump", "rb") as f:
+    with open("../colordump", "rb") as f:
         global colorOptions
         colorOptions = pickle.load(f)
 

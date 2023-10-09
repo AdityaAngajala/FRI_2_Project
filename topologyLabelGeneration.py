@@ -11,11 +11,12 @@ import re
 
 
 class Const:
-    LAND_SIZE = 512
+    LAND_SIZE = 128
     MIN_ELEVATION = -192
     MAX_ELEVATION = 191
     NUM_INTERVALS = 24
     NUM_VALS_PER_INTERVAL = math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
+    UPSCALE = 3
 
 
 posXOptions = ["left", "center", "right"]
@@ -89,7 +90,8 @@ def generate_rand_from_levels(min_val, max_val, level, num_levels, padding_ratio
         (level + padding_ratio) * range_per_level) + min_val
 
 
-def gen_rand_attributes(quad_x, quad_y, height_opt, width_opt, radius_min=20, radius_max=100, min_height=50, max_height=120):
+def gen_rand_attributes(quad_x, quad_y, height_opt, width_opt, radius_min=20, radius_max=100, min_height=50,
+                        max_height=120):
     random_coord = generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_x, 3, 1 / 3), \
         generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_y, 3, 1 / 3)
     random_radius = generate_rand_from_levels(radius_min, radius_max, width_opt, len(widthOptions), 0.1)
@@ -120,7 +122,7 @@ def initialize_colors(pastel=False):
         cmap = colors.ListedColormap(plt.get_cmap('nipy_spectral')(np.linspace(0, 1, 20)))
         cmap2 = colors.ListedColormap(
             colors.ListedColormap(['chocolate', 'darkgreen', 'maroon',
-                                   'slategray', 'fuchsia', 'hotpink', 'indigo'])(np.linspace(0, 1, 7)))
+                                   'slategray', 'fuchsia', 'hotpink', 'goldenrod'])(np.linspace(0, 1, 7)))
         colorOptions = np.concatenate([cmap.colors, cmap2.colors])
 
         # Remove the colors that are too similar to each other and shuffle the list
@@ -194,14 +196,20 @@ def generate_2d_plot(name, save=False):
         sel.annotation.set_text(text)
 
 
-def generate_2d_visualization(name):
+def generate_2d_visualization(name, upscale=1):
     global colorOutput
     image = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE, 3))
     for i in range(Const.LAND_SIZE):
         for j in range(Const.LAND_SIZE):
             image[i][j] = colorOutput[int((land[i][j] + abs(Const.MIN_ELEVATION)) // Const.NUM_VALS_PER_INTERVAL)]
+            image[i][j] = np.flip(image[i][j])  # Flipping color channel from RGB to BGR
 
-    cv2.imwrite('images/' + str(name) + '.png', np.array(image)[..., ::-1])  # Flipping color channel from RGB to BGR
+    image_upscale = np.zeros((Const.LAND_SIZE * upscale, Const.LAND_SIZE * upscale, 3))
+    for a in range(upscale):
+        for b in range(upscale):
+            image_upscale[a::upscale, b::upscale] = image
+
+    cv2.imwrite('images/' + str(name) + '.png', image_upscale)
 
 
 def generate_3d_visualization(name):
@@ -258,7 +266,7 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
 
     for _ in range(basinCount):
         generate_feature(generate_basin, basinHeightOptions, taken, f, "basin")
-    
+
     if hillCount == 0 and basinCount == 0:
         f.write("There are no features.\n")
 
@@ -271,13 +279,13 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
     land = np.clip(land, Const.MIN_ELEVATION, Const.MAX_ELEVATION)
 
     # Generate and save 2D and 3D visualizations of the terrain
-    generate_2d_visualization(name)
+    generate_2d_visualization(name, upscale=Const.UPSCALE)
     # generate_2d_plot(name, save=True)
     # generate_3d_visualization(name)
 
 
 if __name__ == '__main__':
     initialize_colors(pastel=False)
-    for count in range(100):
+    for count in range(10):
         generate_terrain(count)
     save_color_order()
