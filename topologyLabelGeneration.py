@@ -234,7 +234,7 @@ def generate_feature(generator, height_opt_arr, taken, f, name):
     rand_coord, randomRadius, randomHeight = gen_rand_attributes(quad_x, quad_y, height_opt, width_opt)
     generator(randomRadius, randomHeight, rand_coord[0], rand_coord[1])
     posX, posY = posXOptions[quad_x], posYOptions[quad_y]
-    label = f"There is a {height_opt_arr[height_opt]}, {widthOptions[width_opt]} {name} in the {posY}-{posX}"
+    label = f"A {height_opt_arr[height_opt]}, {widthOptions[width_opt]} {name} in the {posY}-{posX}"
     label = re.sub(" , ", ' ', label)
     label = re.sub(",  ", ' ', label)
     label = re.sub(r'\s{2,}', ' ', label)
