@@ -16,7 +16,7 @@ class Const:
     MAX_ELEVATION = 191
     NUM_INTERVALS = 24
     NUM_VALS_PER_INTERVAL = math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
-    UPSCALE = 3
+    UPSCALE = 4
 
 
 posXOptions = ["left", "center", "right"]
@@ -40,6 +40,8 @@ def generate_hill(radius, max_height, cy, cx):
             if distance <= radius:
                 land[x, y] += max_height * quadratic_scaling(distance, radius)
 
+    return land[x, y]
+
 
 def generate_basin(radius, max_height, cy, cx):
     for x in range(max(0, int(cx - radius)), min(Const.LAND_SIZE, int(cx + radius))):
@@ -52,11 +54,11 @@ def generate_basin(radius, max_height, cy, cx):
                 land[x, y] -= max_height * quadratic_scaling(distance, radius)
 
 
-def generate_noise(noise_freq=60.0, octaves=6, persistence=0.5, lacunarity=2.0):
-    z = random.random() * Const.LAND_SIZE
-    terrain_noise = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE))
-    for x in range(Const.LAND_SIZE):
-        for y in range(Const.LAND_SIZE):
+def generate_noise(noise_freq=60.0, octaves=6, persistence=0.5, lacunarity=2.0, size=Const.LAND_SIZE):
+    z = random.random() * size
+    terrain_noise = np.zeros((size, size))
+    for x in range(size):
+        for y in range(size):
             terrain_noise[x][y] = noise.pnoise3(x / noise_freq,
                                                 y / noise_freq,
                                                 z / noise_freq,
@@ -66,7 +68,7 @@ def generate_noise(noise_freq=60.0, octaves=6, persistence=0.5, lacunarity=2.0):
                                                 repeatx=1024,
                                                 repeaty=1024,
                                                 base=42)
-            terrain_noise[x][y] = (terrain_noise[x][y])
+            terrain_noise[x][y] = (terrain_noise[x][y] + 0.25)
 
     print(np.max(terrain_noise))
     return terrain_noise
@@ -90,7 +92,7 @@ def generate_rand_from_levels(min_val, max_val, level, num_levels, padding_ratio
         (level + padding_ratio) * range_per_level) + min_val
 
 
-def gen_rand_attributes(quad_x, quad_y, height_opt, width_opt, radius_min=20, radius_max=100, min_height=50,
+def gen_rand_attributes(quad_x, quad_y, height_opt, width_opt, radius_min=15, radius_max=35, min_height=50,
                         max_height=120):
     random_coord = generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_x, 3, 1 / 3), \
         generate_rand_from_levels(0, Const.LAND_SIZE - 1, quad_y, 3, 1 / 3)
@@ -178,7 +180,11 @@ def generate_2d_plot(name, save=False):
     bounds = np.arange(Const.MIN_ELEVATION - 1, Const.MAX_ELEVATION + 1, Const.NUM_VALS_PER_INTERVAL)
     cmap = colors.ListedColormap(colorOptions)
     norm = colors.BoundaryNorm(bounds, cmap.N)
-    ax.imshow(land, cmap=cmap, norm=norm)
+    #ax.imshow(land, cmap=cmap, norm=norm)
+
+    ax.imshow(land, cmap='rainbow')
+
+
 
     # Save the image to a file
     if save:
@@ -280,12 +286,12 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3)
 
     # Generate and save 2D and 3D visualizations of the terrain
     generate_2d_visualization(name, upscale=Const.UPSCALE)
-    # generate_2d_plot(name, save=True)
+    generate_2d_plot(name, save=True)
     # generate_3d_visualization(name)
 
 
 if __name__ == '__main__':
-    initialize_colors(pastel=False)
+    initialize_colors(pastel=True)
     for count in range(10):
         generate_terrain(count)
     save_color_order()
