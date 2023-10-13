@@ -1,74 +1,26 @@
-import random
 import mayavi.mlab as mlab
 import mplcursors
-import noise
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import colors
 import pyvista as pv
-from pyvista import examples
-
-from topologyLabelGeneration import quadratic_scaling
+from topologyLabelGeneration import generate_noise
 
 
 class Const:
-    LAND_SIZE = 128
-
-
-def generate_noise(noise_freq=60.0, octaves=6, persistence=0.5, lacunarity=2.0):
-    z = random.random() * Const.LAND_SIZE
-    terrain_noise = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE))
-    for x in range(Const.LAND_SIZE):
-        for y in range(Const.LAND_SIZE):
-            terrain_noise[x][y] = noise.pnoise3(x / noise_freq,
-                                                y / noise_freq,
-                                                z / noise_freq,
-                                                octaves=octaves,
-                                                persistence=persistence,
-                                                lacunarity=lacunarity,
-                                                repeatx=1024,
-                                                repeaty=1024,
-                                                base=42)
-            terrain_noise[x][y] = (terrain_noise[x][y] + 0.25)
-
-    print(np.max(terrain_noise))
-    return terrain_noise
-
-
-def generate_hill(radius, max_height, cy, cx, height_map):
-    for x in range(max(0, int(cx - radius)), min(Const.LAND_SIZE, int(cx + radius))):
-        for y in range(max(0, int(cy - radius)), min(Const.LAND_SIZE, int(cy + radius))):
-            # Calculate the distance from the current point to the center
-            distance = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-
-            # Check if the point is within the circular area
-            if distance <= radius:
-                height_map[x, y] += max_height * quadratic_scaling(distance, radius)
-
-
-def gen_rand_attributes(radius_min=10, radius_max=30, min_height=50, max_height=90):
-    random_coord = random.randint(0, Const.LAND_SIZE - 1), random.randint(0, Const.LAND_SIZE - 1)
-    random_radius = random.randint(radius_min, radius_max)
-    random_height = random.randint(min_height, max_height)
-    return random_coord, random_radius, random_height
+    LAND_SIZE = 128 + 1
 
 
 def generate_terrain():
     height_map = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE)).astype('float64')
-    height_map += generate_noise()
+    height_map += generate_noise(size=Const.LAND_SIZE)
     height_map = height_map / np.max(np.abs(height_map)) * 30
-
-    hillCount = random.randint(0, 3)
-    rand_coord, randomRadius, randomHeight = gen_rand_attributes()
-
-    # for _ in range(hillCount):
-    #     generate_hill(randomRadius, randomHeight, rand_coord[0], rand_coord[1], height_map)
 
     return height_map
 
 
 def boolean3d_2_points(specs):
-    specsPoints = np.column_stack(np.where(specs))
+    specsPoints = np.column_stack(specs)
     return specsPoints[:, 0], specsPoints[:, 1], specsPoints[:, 2]
 
 
@@ -88,6 +40,7 @@ def generate_2d_plot(heightthing):
         text = f"Point: ({x}, {y})\nValue: {value}"
         sel.annotation.set_text(text)
 
+
 def init_colors():
     # Start with a base of 20 colors taken from the nipy_spectral colormap, then add 6 more colors to the base
     cmap = colors.ListedColormap(plt.get_cmap('nipy_spectral')(np.linspace(0, 1, 20)))
@@ -104,28 +57,30 @@ def init_colors():
 
     return colors.ListedColormap(colorOptions)
 
+def generate(old_noise=False):
+    # Generate Voxel Space
+    x, y, z = np.indices((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
+    grid = pv.StructuredGrid(z, y, x)
 
-hmap = generate_terrain()
+    if (old_noise):
+        # Make Land Generation
+        height_map = generate_terrain()
+        terrain = np.logical_and(x >= 0, z < height_map[:, :, np.newaxis]) # 3D-bool array based on height map
+        grid.hide_points(np.invert(terrain).flatten())
+    else:
+        freq = (3, 3, 3)
+        noise3D = pv.perlin_noise(1, freq, (0, 0, 0))
+        grid = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0], dim=(Const.LAND_SIZE - 1, Const.LAND_SIZE - 1, Const.LAND_SIZE - 1))
+        grid = grid.threshold(0.2)
 
-# prepare some coordinates
-x, y, z = np.indices((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
-bottom = np.logical_and((x >= 0) & (y >= 0), z < hmap[:, :, np.newaxis])
+    # Randomize Color of Each Block
+    colorSet = np.random.randint(0, 200, np.arange(0, grid.GetNumberOfCells(), 1).shape)
+    grid.cell_data['Colors'] = colorSet
 
-grid = pv.StructuredGrid(z, y, x)
-ok = (np.invert(bottom).flatten())
-grid.hide_points(ok)
+    grid.plot(show_edges=True, cmap=init_colors(), interpolate_before_map=False, scalars='Colors')
 
-colorSet = np.empty(x.shape, dtype=object)
-colorSet = np.random.random_integers(0, 200, colorSet.shape)
+    # mlab.points3d(*boolean3d_2_points(bottom), color=(1, 0, 0), scale_factor=1.0, mode='cube')
+    # mlab.show()
 
-grid['values'] = colorSet.flatten()
-print(grid.DataSetFilters.extract_cells())
-
-cmap = init_colors()
-
-
-grid.plot(show_edges=True, cmap=cmap, interpolate_before_map=False)
-
-# mlab.points3d(*boolean3d_2_points(bottom), color=(1, 0, 0), scale_factor=1.0, mode='cube')
-# mlab.show()
-
+if __name__ == '__main__':
+    generate(old_noise=True)
