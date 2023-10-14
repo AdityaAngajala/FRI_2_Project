@@ -4,24 +4,19 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import colors
 import pyvista as pv
+from pyvista.plotting.opts import PickerType
 from topologyLabelGeneration import generate_noise
 
 
 class Const:
-    LAND_SIZE = 128 + 1
+    LAND_SIZE = 10 + 1
 
 
 def generate_terrain():
     height_map = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE)).astype('float64')
     height_map += generate_noise(size=Const.LAND_SIZE)
-    height_map = height_map / np.max(np.abs(height_map)) * 30
-
+    height_map = height_map / np.max(np.abs(height_map)) * Const.LAND_SIZE * (30 / 128)
     return height_map
-
-
-def boolean3d_2_points(specs):
-    specsPoints = np.column_stack(specs)
-    return specsPoints[:, 0], specsPoints[:, 1], specsPoints[:, 2]
 
 
 def generate_2d_plot(heightthing):
@@ -57,6 +52,7 @@ def init_colors():
 
     return colors.ListedColormap(colorOptions)
 
+
 def generate(old_noise=False):
     # Generate Voxel Space
     x, y, z = np.indices((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
@@ -65,21 +61,36 @@ def generate(old_noise=False):
     if (old_noise):
         # Make Land Generation
         height_map = generate_terrain()
-        terrain = np.logical_and(x >= 0, z < height_map[:, :, np.newaxis]) # 3D-bool array based on height map
+        terrain = np.logical_and(x >= 0, z < height_map[:, :, np.newaxis])  # 3D-bool array based on height map
         grid.hide_points(np.invert(terrain).flatten())
+
     else:
         freq = (3, 3, 3)
         noise3D = pv.perlin_noise(1, freq, (0, 0, 0))
-        grid = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0], dim=(Const.LAND_SIZE - 1, Const.LAND_SIZE - 1, Const.LAND_SIZE - 1))
+        grid = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0],
+                                  dim=(Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
         grid = grid.threshold(0.2)
 
     # Randomize Color of Each Block
     colorSet = np.random.randint(0, 200, np.arange(0, grid.GetNumberOfCells(), 1).shape)
     grid.cell_data['Colors'] = colorSet
+    grid.cell_data['cell_ind'] = np.arange(grid.GetNumberOfCells())
 
-    grid.plot(show_edges=True, cmap=init_colors(), interpolate_before_map=False, scalars='Colors')
+    def printInfo(ok):
+        if pl.picked_cell:
+            coords = np.floor(pl.picked_cell.center).astype(int)
+            print('X: ', coords[0], ' Y: ', coords[1], ' Z: ', coords[2])
+            index = (pl.picked_cell['cell_ind'])[0]
+            print("Color: ", (grid.cell_data['Colors'])[index])
 
-    # mlab.points3d(*boolean3d_2_points(bottom), color=(1, 0, 0), scale_factor=1.0, mode='cube')
+    pl = pv.Plotter()
+    pl.add_mesh(grid, show_edges=True, cmap=init_colors(), interpolate_before_map=False, scalars='Colors')
+    pl.enable_element_picking(pickable_window=False, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
+
+    pl.show(auto_close=False)
+
+    # grid.plot(show_edges=True, cmap=init_colors(), interpolate_before_map=False, scalars='Colors')
+    # mlab.points3d(*np.where(terrain), color=(1, 0, 0), scale_factor=1.0, mode='cube')
     # mlab.show()
 
 if __name__ == '__main__':
