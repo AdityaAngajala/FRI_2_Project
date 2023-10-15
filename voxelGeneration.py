@@ -1,6 +1,6 @@
-import mayavi.mlab as mlab
 import mplcursors
 import numpy as np
+import vtk
 from matplotlib import pyplot as plt
 from matplotlib import colors
 import pyvista as pv
@@ -9,7 +9,11 @@ from topologyLabelGeneration import generate_noise
 
 
 class Const:
-    LAND_SIZE = 10 + 1
+    LAND_SIZE = 64
+    NUM_COLORS = 24
+
+
+data = []
 
 
 def generate_terrain():
@@ -19,19 +23,29 @@ def generate_terrain():
     return height_map
 
 
-def generate_2d_plot(heightthing):
+def generate_2d_plot(plot, name, save=True):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.axis('off')
-    ax.imshow(heightthing, cmap='rainbow')
 
-    # Cursor Annotations
+    cmap = init_colors()
+    bounds = np.arange(0, Const.NUM_COLORS + 1, 1)
+    norm = colors.BoundaryNorm(bounds, cmap.N)
+    cmap.set_bad('k', alpha=0)
+    ax.imshow(plot, cmap=cmap, norm=norm)
+
+    if save:
+        plt.savefig('images3D/' + str(name) + 'Plot.png', bbox_inches='tight', pad_inches=0)
+        plt.close()
+        return
+
+        # Cursor Annotations
     cursor = mplcursors.cursor(hover=True)
 
     @cursor.connect("add")
     def on_add(sel):
         # Get the coordinates of the selected point
         x, y = int(sel.target[0]), int(sel.target[1])
-        value = heightthing[y][x]
+        value = plot[y][x]
         text = f"Point: ({x}, {y})\nValue: {value}"
         sel.annotation.set_text(text)
 
@@ -53,45 +67,111 @@ def init_colors():
     return colors.ListedColormap(colorOptions)
 
 
-def generate(old_noise=False):
-    # Generate Voxel Space
-    x, y, z = np.indices((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
-    grid = pv.StructuredGrid(z, y, x)
+def toggleHeightSlicer(slicer, axis: str, pl, mesh, clip=True):
+    pl.clear()
+    if slicer:
+        if clip:
+            pl.add_mesh_clip_plane(mesh, show_edges=True, cmap=init_colors(),
+                                   scalars='Colors', crinkle=True, invert=True, clim=[0, Const.NUM_COLORS],
+                                   assign_to_axis=axis, interaction_event=vtk.vtkCommand.InteractionEvent)
+        else:
+            pl.add_mesh_slice(mesh, show_edges=True, cmap=init_colors(), clim=[0, Const.NUM_COLORS],
+                              scalars='Colors', assign_to_axis=axis, interaction_event=vtk.vtkCommand.InteractionEvent)
+    else:
+        pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
 
-    if (old_noise):
+    return not slicer
+
+
+def enable_slicing(pl, mesh, clip=False):
+    sliceDict = {'x': True, 'y': True, 'z': True}
+
+    def toggle_x():
+        sliceDict['x'] = toggleHeightSlicer(sliceDict.get('x'), 'x', pl, mesh, clip=clip)
+
+    def toggle_y():
+        sliceDict['y'] = toggleHeightSlicer(sliceDict.get('y'), 'y', pl, mesh, clip=clip)
+
+    def toggle_z():
+        sliceDict['z'] = toggleHeightSlicer(sliceDict.get('z'), 'z', pl, mesh, clip=clip)
+
+    pl.add_key_event('x', toggle_x)
+    pl.add_key_event('y', toggle_y)
+    pl.add_key_event('z', toggle_z)
+
+
+def save_slices(xSlices=False, ySlices=False, zSlices=False):
+    if xSlices:
+        x_slices = [data[x, :, :] for x in reversed(range(Const.LAND_SIZE))]
+        for num in range(len(x_slices)):
+            generate_2d_plot(np.rot90(x_slices[num]), "xSlice" + str(num))
+    if ySlices:
+        y_slices = [data[:, y, :] for y in range(Const.LAND_SIZE)]
+        for num in range(len(y_slices)):
+            generate_2d_plot(np.rot90(y_slices[num]), "ySlice" + str(num))
+    if zSlices:
+        z_slices = [data[:, :, z] for z in range(Const.LAND_SIZE)]
+        for num in range(len(z_slices)):
+            generate_2d_plot(z_slices[num], "zSlice" + str(num))
+
+
+def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=False):
+    # Generate Voxel Space
+    x, y, z = np.indices((Const.LAND_SIZE + 1, Const.LAND_SIZE + 1, Const.LAND_SIZE + 1))
+    grid = pv.StructuredGrid(z, y, x)
+    x, y, z = np.indices((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
+
+    if old_noise:
         # Make Land Generation
         height_map = generate_terrain()
         terrain = np.logical_and(x >= 0, z < height_map[:, :, np.newaxis])  # 3D-bool array based on height map
-        grid.hide_points(np.invert(terrain).flatten())
-
     else:
         freq = (3, 3, 3)
         noise3D = pv.perlin_noise(1, freq, (0, 0, 0))
         grid = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0],
-                                  dim=(Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
-        grid = grid.threshold(0.2)
+                                  dim=(Const.LAND_SIZE + 1, Const.LAND_SIZE + 1, Const.LAND_SIZE + 1))
 
     # Randomize Color of Each Block
-    colorSet = np.random.randint(0, 200, np.arange(0, grid.GetNumberOfCells(), 1).shape)
+    colorSet = np.random.randint(0, Const.NUM_COLORS + 1, np.arange(0, grid.GetNumberOfCells(), 1).shape).astype(float)
+    colorSet -= 0.5
     grid.cell_data['Colors'] = colorSet
     grid.cell_data['cell_ind'] = np.arange(grid.GetNumberOfCells())
+
+    global data
+    if old_noise:
+        mesh = grid.cast_to_unstructured_grid()
+        mesh.remove_cells(np.invert(terrain).flatten(), inplace=True)
+
+        data = np.where(terrain.flatten(), colorSet, np.nan)
+        data = data.reshape((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
+    else:
+        grid = grid.threshold(0.2)
+        mesh = grid.cast_to_unstructured_grid()
+
+        data = np.full((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE), np.nan).flatten()
+        for index in range(len(grid.cell_data['cell_ind'])):
+            # print(grid.cell_data['cell_ind'][index])
+            # print( grid.cell_data['Colors'][index])
+            data[(grid.cell_data['cell_ind'])[index]] = grid.cell_data['Colors'][index]
+
+        data = data.reshape((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
 
     def printInfo(ok):
         if pl.picked_cell:
             coords = np.floor(pl.picked_cell.center).astype(int)
             print('X: ', coords[0], ' Y: ', coords[1], ' Z: ', coords[2])
-            index = (pl.picked_cell['cell_ind'])[0]
-            print("Color: ", (grid.cell_data['Colors'])[index])
+            ind = (pl.picked_cell['cell_ind'])[0]  # [0] is because it is returned as array
+            indexColor = list(grid.cell_data['cell_ind']).index(ind)
+            print("Color: ", (grid.cell_data['Colors'])[indexColor])
 
     pl = pv.Plotter()
-    pl.add_mesh(grid, show_edges=True, cmap=init_colors(), interpolate_before_map=False, scalars='Colors')
-    pl.enable_element_picking(pickable_window=False, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
-
+    pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
+    enable_slicing(pl, mesh, clip=clip)
+    pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
+    save_slices(xSlices, ySlices, zSlices)
     pl.show(auto_close=False)
 
-    # grid.plot(show_edges=True, cmap=init_colors(), interpolate_before_map=False, scalars='Colors')
-    # mlab.points3d(*np.where(terrain), color=(1, 0, 0), scale_factor=1.0, mode='cube')
-    # mlab.show()
 
 if __name__ == '__main__':
-    generate(old_noise=True)
+    generate(old_noise=True, clip=False, xSlices=False)
+
