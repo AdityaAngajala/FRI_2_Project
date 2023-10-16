@@ -19,13 +19,16 @@ data = []
 def generate_terrain():
     height_map = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE)).astype('float64')
     height_map += generate_noise(size=Const.LAND_SIZE)
-    height_map = height_map / np.max(np.abs(height_map)) * Const.LAND_SIZE * (30 / 128)
+    height_map = height_map / np.max(np.abs(height_map)) * Const.LAND_SIZE * (40 / 128)
     return height_map
 
 
 def generate_2d_plot(plot, name, save=True):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.axis('off')
+
+    if np.isnan(plot).all():
+        return
 
     cmap = init_colors()
     bounds = np.arange(0, Const.NUM_COLORS + 1, 1)
@@ -115,45 +118,50 @@ def save_slices(xSlices=False, ySlices=False, zSlices=False):
             generate_2d_plot(z_slices[num], "zSlice" + str(num))
 
 
+def randomize_colors(grid):
+    # Randomize Color of Each Block
+    colorSet = np.random.randint(0, Const.NUM_COLORS + 1, np.arange(0, grid.GetNumberOfCells(), 1).shape).astype(float)
+    colorSet -= 0.5
+    grid.cell_data['Colors'] = colorSet
+
+
 def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=False):
     # Generate Voxel Space
     x, y, z = np.indices((Const.LAND_SIZE + 1, Const.LAND_SIZE + 1, Const.LAND_SIZE + 1))
     grid = pv.StructuredGrid(z, y, x)
     x, y, z = np.indices((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
 
+    # 3D Noise Sampling for Colors
+
+    freq = (2, 2, 2)
+    noise3D = pv.perlin_noise(1, freq, (0, 0, 0))
+    grid2 = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0],
+                               dim=(Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
+    grid.cell_data['Colors'] = (np.round(grid2['scalars'] * Const.NUM_COLORS)) - 0.5
+
+    # Label index before removing cells to get back original position
+    grid.cell_data['cell_ind'] = np.arange(grid.GetNumberOfCells())
+    # randomize_colors(grid)
+
+    global data
     if old_noise:
         # Make Land Generation
         height_map = generate_terrain()
         terrain = np.logical_and(x >= 0, z < height_map[:, :, np.newaxis])  # 3D-bool array based on height map
-    else:
-        freq = (3, 3, 3)
-        noise3D = pv.perlin_noise(1, freq, (0, 0, 0))
-        grid = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0],
-                                  dim=(Const.LAND_SIZE + 1, Const.LAND_SIZE + 1, Const.LAND_SIZE + 1))
 
-    # Randomize Color of Each Block
-    colorSet = np.random.randint(0, Const.NUM_COLORS + 1, np.arange(0, grid.GetNumberOfCells(), 1).shape).astype(float)
-    colorSet -= 0.5
-    grid.cell_data['Colors'] = colorSet
-    grid.cell_data['cell_ind'] = np.arange(grid.GetNumberOfCells())
-
-    global data
-    if old_noise:
         mesh = grid.cast_to_unstructured_grid()
         mesh.remove_cells(np.invert(terrain).flatten(), inplace=True)
 
-        data = np.where(terrain.flatten(), colorSet, np.nan)
+        data = np.where(terrain.flatten(), grid.cell_data['Colors'], np.nan)
         data = data.reshape((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
     else:
         grid = grid.threshold(0.2)
         mesh = grid.cast_to_unstructured_grid()
 
         data = np.full((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE), np.nan).flatten()
-        for index in range(len(grid.cell_data['cell_ind'])):
-            # print(grid.cell_data['cell_ind'][index])
-            # print( grid.cell_data['Colors'][index])
-            data[(grid.cell_data['cell_ind'])[index]] = grid.cell_data['Colors'][index]
 
+        for index in range(len(grid.cell_data['cell_ind'])):
+            data[(grid.cell_data['cell_ind'])[index]] = grid.cell_data['Colors'][index]
         data = data.reshape((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
 
     def printInfo(ok):
@@ -173,5 +181,4 @@ def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=
 
 
 if __name__ == '__main__':
-    generate(old_noise=True, clip=False, xSlices=False)
-
+    generate(old_noise=False, clip=False, zSlices=True)
