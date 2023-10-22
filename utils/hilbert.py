@@ -4,6 +4,7 @@ import numpy as np
 import math
 import pyvista as pv
 from mpl_toolkits.mplot3d import Axes3D
+import pickle
 
 N = 3
 M = 6
@@ -192,36 +193,61 @@ def TR_algo3(h):
 
 
 def gen_coords(dimSize, size_exponent):
+    global N, M
+    N = dimSize
+    M = size_exponent
     pointsX = []
     pointsY = []
     pointsZ = []
     # points = []
     for h in range(2 ** (dimSize * size_exponent)):
-        x, y, z = TR_algo3(h)
-        pointsX.append(x)
-        pointsY.append(y)
-        pointsZ.append(z)
+        if dimSize == 3:
+            x, y, z = TR_algo3(h)
+            pointsX.append(x)
+            pointsY.append(y)
+            pointsZ.append(z)
+        else:
+            x, y = TR_algo3(h)
+            pointsX.append(x)
+            pointsY.append(y)
         # points.append(x, y, z)
         # print(x, y, z)
-    return pointsX, pointsY, pointsZ
+    if dimSize == 3:
+        return pointsX, pointsY, pointsZ
+    else:
+        return pointsX, pointsY
 
 if __name__ == '__main__':
     x, y, z = gen_coords(N, M)
+    save = (x, y, z)
+    with open("hilbert3D", "wb") as f:
+        pickle.dump(save, f)
 
-    print(len(x))
+    for i in range(10):
+        print("(", x[i], y[i], z[i], ")")
 
-    points = np.column_stack((x, y, z))
-    cloud = pv.PolyData(points)
+    x, y = gen_coords(2, 9)
+    save = (x, y)
+    with open("hilbert2D", "wb") as f:
+        pickle.dump(save, f)
 
-    plotter = pv.Plotter()
-
-    # Add the 3D scatter plot
-    # plotter.add_points(cloud, color='b', point_size=5, render_points_as_spheres=True)
-
-    # Add lines to connect points
-    for i in range(1, len(x)):
-        line = pv.Line([x[i - 1], y[i - 1], z[i - 1]], [x[i], y[i], z[i]])
-        plotter.add_mesh(line, color='r')
-
-    # Display the plot
-    plotter.show()
+    for i in range(10):
+        print("ok (", x[i], y[i], ")")
+    #
+    # print(len(x))
+    #
+    # points = np.column_stack((x, y, z))
+    # cloud = pv.PolyData(points)
+    #
+    # plotter = pv.Plotter()
+    #
+    # # Add the 3D scatter plot
+    # # plotter.add_points(cloud, color='b', point_size=5, render_points_as_spheres=True)
+    #
+    # # Add lines to connect points
+    # for i in range(1, len(x)):
+    #     line = pv.Line([y[i - 1], z[i - 1], x[i - 1]], [y[i], z[i], x[i]])
+    #     plotter.add_mesh(line, color='r')
+    #
+    # # Display the plot
+    # plotter.show()

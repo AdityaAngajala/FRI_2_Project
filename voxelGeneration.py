@@ -1,15 +1,14 @@
 import math
 import random
-
 import cv2
 import mplcursors
 import numpy as np
 import vtk
 from matplotlib import pyplot as plt
 from matplotlib import colors
-from bad.hilbert import gen_coords
-import pyvista as pv
 from pyvista.plotting.opts import PickerType
+from FRI_2_Project.utils.hilbert import gen_coords
+import pyvista as pv
 from topologyLabelGeneration import generate_noise
 
 
@@ -17,10 +16,14 @@ class Const:
     LAND_SIZE = 64
     NUM_COLORS = 24
     IMAGE_HEIGHT_CAP = 512
+    VOXEL_DOWNSCALE = 2
+    IMAGE_UPSCALE = 1
 
 
 data = []
 colorOutput = []
+hilbert_x, hilbert_y, hilbert_z = [], [], []
+hilbertX, hilbertY = [], []
 
 
 def plot_slice(plot, name, save=True):
@@ -53,7 +56,7 @@ def plot_slice(plot, name, save=True):
         sel.annotation.set_text(text)
 
 
-def plot_sparse(input_data):
+def plot_sparse_interleave(input_data, name=''):
     outputPlot = np.full((Const.LAND_SIZE ** 2 * 2, Const.LAND_SIZE), np.nan)
 
     for index in range(len(input_data)):
@@ -64,13 +67,30 @@ def plot_sparse(input_data):
             outputPlot[index * 2][index2] = colorVals[index2]
             outputPlot[index * 2 + 1][index2] = lenVals[index2]
 
-    max_len = np.max([len(col) for col in input_data])
+    # max_len = np.max([len(col) for col in input_data])
+    max_len = Const.LAND_SIZE // Const.VOXEL_DOWNSCALE
     print("MAX LEN: ", max_len)
-    outputPlot = np.where(outputPlot < 0, 0, outputPlot)
-    outputPlot = np.where(outputPlot > 23.5, 23.5, outputPlot)
-    init_colors()
 
-    write_image_interleave(outputPlot, max_len, upscale=1)
+    write_image_interleave(outputPlot, max_len, upscale=1, name=name)
+
+
+def plot_sparse_stacked(input_data, name=''):
+    outputPlot = np.full((Const.LAND_SIZE ** 2, Const.LAND_SIZE * 2), np.nan)
+    shouldPlotColor = np.full((Const.LAND_SIZE ** 2, Const.LAND_SIZE * 2), False)
+
+    for index in range(len(input_data)):
+        colorVals = [val[0] for val in input_data[index]]
+        lenVals = [val[1] for val in input_data[index]]
+
+        for index2 in range(len(colorVals)):
+            outputPlot[index][index2] = colorVals[index2]
+            shouldPlotColor[index][index2] = True
+            outputPlot[index][index2 + len(colorVals)] = lenVals[index2]
+
+    max_len = (Const.LAND_SIZE // Const.VOXEL_DOWNSCALE) * 2
+    print("MAX LEN: ", max_len)
+
+    write_image_stacked(outputPlot, shouldPlotColor, max_len, upscale=1, name=name)
 
 
 def sparse_data(input_data):
@@ -89,20 +109,19 @@ def sparse_data(input_data):
             data_prefilter.append(sparse_list(prefilter_sub(column)))
 
             # printColInfo(column)
-
-            columnSum += np.count_nonzero(~np.isnan(column))
-            sparseListSum += len(sparse_list(column)) * 2 - 2
-            prefilterSum += len(sparse_list(prefilter_sub(column))) * 2 - 2
+            # columnSum += np.count_nonzero(~np.isnan(column))
+            # sparseListSum += len(sparse_list(column)) * 2 - 2
+            # prefilterSum += len(sparse_list(prefilter_sub(column))) * 2 - 2
 
     # printAvgColInfo(columnSum, sparseListSum, prefilterSum, data_sparse, data_prefilter)
-    plot_sparse(data_sparse)
+    return data_sparse
 
 
 def sparse_list(input_list):
     list_sparse = []
     count = 0
-    prevVal = input_list[0]
     input_list = np.where(np.isnan(input_list), np.min, input_list)
+    prevVal = input_list[0]
     for val in input_list:
         if not (val == prevVal):
             if prevVal == np.min:
@@ -146,9 +165,41 @@ def prefilter_sub(input_list):
     return output
 
 
-def write_image_interleave(outputPlot, max_len, upscale=1):
+def bin_val(val):
+    if val <= 16 * Const.VOXEL_DOWNSCALE:
+        return colorOutput[(val // Const.VOXEL_DOWNSCALE) - 1]
+    else:
+        return colorOutput[(((val // Const.VOXEL_DOWNSCALE) - 17) // 2) + 16]  # 2 = Range of Bins after 16 for 32B
+
+
+def write_image_interleave(outputPlot, max_len, upscale=1, name=""):
     height_cap = Const.IMAGE_HEIGHT_CAP
-    image = np.full((height_cap, (len(outputPlot) // height_cap) * max_len, 3), np.nan)
+    image = np.full((height_cap, math.ceil(len(outputPlot) / height_cap) * max_len, 3), np.nan)
+
+    count = 0
+    for i in range(len(outputPlot)):
+        for j in range(max_len):
+            outputI = i % height_cap
+            outputJ = (count // height_cap) * max_len + j
+            if np.isnan(outputPlot[i][j]):
+                image[outputI][outputJ] = (255, 255, 255)
+            else:
+                val = math.floor(outputPlot[i][j])
+                if i % 2 == 0:
+                    image[outputI][outputJ] = colorOutput[val]
+                else:
+                    image[outputI][outputJ] = bin_val(val)
+
+                # Flipping color channel from RGB to BGR
+                image[outputI][outputJ] = np.flip(image[outputI][outputJ])
+        count += 1
+
+    cv2.imwrite('images3D/interleave/' + 'interleave' + name + '.png', upscale_image(image, upscale=upscale))
+
+
+def write_image_stacked(outputPlot, shouldPlotColor, max_len, upscale=1, name=''):
+    height_cap = Const.IMAGE_HEIGHT_CAP
+    image = np.full((height_cap, math.ceil(len(outputPlot) / height_cap) * max_len, 3), np.nan)
 
     count = 0
     for i in range(len(outputPlot)):
@@ -159,18 +210,18 @@ def write_image_interleave(outputPlot, max_len, upscale=1):
             if np.isnan(outputPlot[i][j]):
                 image[outputI][outputJ] = (255, 255, 255)
             else:
-                if i % 2 == 0:
-                    image[outputI][outputJ] = colorOutput[np.floor(outputPlot[i][j]).astype(int)]
-                    # Flipping color channel from RGB to BGR
-                    image[outputI][outputJ] = np.flip(image[outputI][outputJ])
+                val = outputPlot[i][j].astype(int)
+
+                if shouldPlotColor[i][j]:
+                    image[outputI][outputJ] = colorOutput[math.floor(val)]
                 else:
-                    val = outputPlot[i][j] * 10
-                    if val > 255:
-                        val = outputPlot[i][j]
-                    image[outputI][outputJ] = (val, val, val)
+                    image[outputI][outputJ] = bin_val(val)
+
+            # Flipping color channel from RGB to BGR
+            image[outputI][outputJ] = np.flip(image[outputI][outputJ])
         count += 1
 
-    cv2.imwrite('images3D/' + 'sdkjfsdkfj.png', upscale_image(image, upscale=upscale))
+    cv2.imwrite('images3D/stacked/' + 'stacked' + name + '.png', upscale_image(image, upscale=upscale))
 
 
 def upscale_image(image, upscale=1):
@@ -182,26 +233,35 @@ def upscale_image(image, upscale=1):
     return image_upscale
 
 
+def upscale_voxel(voxel, upscale=1):
+    shape = np.multiply(voxel.shape, upscale)
+    voxel_upscale = np.full(shape, np.nan)
+    for a in range(upscale):
+        for b in range(upscale):
+            for c in range(upscale):
+                voxel_upscale[a::upscale, b::upscale, c::upscale] = voxel
+    return voxel_upscale
+
+
 # Really only works for 64x64x64 because the next size that get you a square image is 256x256x256 which is massive
-def plot_hilbert(input_data):
-    hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
+def write_hilbert(name=''):
+    global hilbert_x, hilbert_y, hilbert_z, hilbertX, hilbertY
     image = np.full((round(math.sqrt(Const.LAND_SIZE ** 3)), round(math.sqrt(Const.LAND_SIZE ** 3)), 3), np.nan)
 
-    input_data = np.where(input_data < 0, 0, input_data)
-    input_data = np.where(input_data > 23.5, 23.5, input_data)
-
+    vals = []
     num = 0
     print(len(image))
     print("HILBER", len(hilbert_x))
     for i in range(len(image)):
         for j in range(len(image)):
 
-            val = input_data[hilbert_z[num]][hilbert_y[num]][hilbert_x[num]]
+            val = data[hilbert_x[num]][hilbert_y[num]][hilbert_z[num]]
+            vals.append(val)
             if np.isnan(val):
-                image[i][j] = (255, 255, 255)
+                image[hilbertX[num]][hilbertY[num]] = (255, 255, 255)
             else:
                 try:
-                    image[i][j] = colorOutput[np.floor(val).astype(int)]
+                    image[hilbertX[num]][hilbertY[num]] = colorOutput[np.floor(val).astype(int)]
                 except IndexError:
                     print(i, j)
                     print(val)
@@ -209,8 +269,30 @@ def plot_hilbert(input_data):
                     print(colorOutput[val])
             num += 1
 
-    image = image.reshape(2048, 128, 3)
-    cv2.imwrite('images3D/' + 'hilbert.png', upscale_image(image, upscale=1))
+    # image = image.reshape(4096, 64, 3)
+
+    cv2.imwrite('images3D/hilbert/' + 'hilbert' + name + '.png', upscale_image(image, upscale=1))
+
+def write_slices(upscale=1, name=''):
+    height_cap = Const.IMAGE_HEIGHT_CAP
+    image = np.full((height_cap, height_cap, 3), np.nan)
+
+    z_slices = [data[:, :, z] for z in range(Const.LAND_SIZE)]
+    for num in range(len(z_slices)):
+        z_slice = z_slices[num]
+        for i in range(Const.LAND_SIZE):
+            for j in range(Const.LAND_SIZE):
+                outputI = ((num % 8) * Const.LAND_SIZE) + i
+                outputJ = ((num // 8) * Const.LAND_SIZE) + j
+                # print("I,J: ", outputI, ", ", outputJ)
+                if np.isnan(z_slice[i][j]):
+                    image[outputI][outputJ] = (255, 255, 255)
+                else:
+                    image[outputI][outputJ] = colorOutput[np.floor(z_slice[i][j]).astype(int)]
+                    # Flipping color channel from RGB to BGR
+                    image[outputI][outputJ] = np.flip(image[outputI][outputJ])
+
+    cv2.imwrite('images3D/slices/' + 'slices' + name + '.png', upscale_image(image, upscale=upscale))
 
 
 def init_colors():
@@ -227,8 +309,9 @@ def init_colors():
     colorOptions.pop(11)
     colorOptions.pop(12)
 
-    for colorVal in colorOptions:
-        colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
+    if len(colorOutput) == 0:
+        for colorVal in colorOptions:
+            colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
 
     return colors.ListedColormap(colorOptions)
 
@@ -288,12 +371,18 @@ def generate_terrain():
     return height_map
 
 
-def gen_voxel_colors(grid):
-    freq = (random.randrange(150, 300) / 100, random.randrange(150, 300) / 100, random.randrange(150, 300) / 100)
+def gen_voxel_colors(grid, upscale=1):
+    freq = (random.randrange(150, 500) / 100, random.randrange(150, 500) / 100, random.randrange(150, 500) / 100)
     noise3D = pv.perlin_noise(1, freq, (0, 0, 0))
-    grid2 = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0],
-                               dim=(Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
-    grid.cell_data['Colors'] = (np.round(grid2['scalars'] * (Const.NUM_COLORS - 1))) - 0.5
+
+    dimShape = (Const.LAND_SIZE // upscale, Const.LAND_SIZE // upscale, Const.LAND_SIZE // upscale)
+
+    grid2 = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0], dim=dimShape)
+
+    colorThing = (np.array(grid2['scalars'])).reshape(dimShape)
+    colorThing = upscale_voxel(colorThing, upscale).flatten()
+
+    grid.cell_data['Colors'] = (np.round(colorThing * (Const.NUM_COLORS - 1))) - 0.5
     grid.cell_data['Colors'] = np.where(grid.cell_data['Colors'] > 0, grid.cell_data['Colors'], -0.5)
 
     # Label index before removing cells to get back original position
@@ -315,7 +404,7 @@ def gen_voxels(old_noise):
     print("Generated Voxel Space")
 
     # 3D Noise Sampling for Colors
-    gen_voxel_colors(grid)
+    gen_voxel_colors(grid, Const.VOXEL_DOWNSCALE)
     init_colors()
     print("Generated Colors")
     # randomize_colors(grid)
@@ -344,10 +433,13 @@ def gen_voxels(old_noise):
         data = data.reshape((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
         print("Terrain Made")
 
+    data = np.where(data < 0, 0, data)
+    data = np.where(data > 23.5, 23.5, data)
+
     return grid, mesh
 
 
-def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=False):
+def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=False, name=""):
     grid, mesh = gen_voxels(old_noise)
     print("Generated Voxels")
 
@@ -364,10 +456,22 @@ def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=
     # enable_slicing(pl, mesh, clip=clip)
     # pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
     # save_slices(xSlices, ySlices, zSlices)
-    sparse_data(data)
-    plot_hilbert(data)
+    # data_sparse = sparse_data(data)
+    # plot_sparse_interleave(data_sparse, name=name)
+    # plot_sparse_stacked(data_sparse, name=name)
+    write_slices(name=name)
+    write_hilbert(name=name)
+
     # pl.show(auto_close=False)
 
 
 if __name__ == '__main__':
-    generate(old_noise=True, clip=False, xSlices=True, zSlices=True)
+    hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
+    hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
+    for num in range(30):
+
+        generate(old_noise=False, clip=False, xSlices=True, zSlices=True, name=str(num))
+        print("PROGRESS: " + str(num + 1) + " / 30")
+
+
+
