@@ -1,4 +1,5 @@
 import tkinter
+from enum import Enum
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import mplcursors
@@ -13,10 +14,11 @@ land = []
 colorOptions = []
 colorOptionsHSV = []
 colorOutput = []
-images = []
 
 
 def get_files(is_dir=False):
+    images = []
+
     if is_dir:
         src = filedialog.askdirectory()
         tkinter.Tk().withdraw()  # prevents an empty tkinter window from appearing
@@ -31,10 +33,14 @@ def get_files(is_dir=False):
         tkinter.Tk().withdraw()  # prevents an empty tkinter window from appearing
         images.append(cv2.imread(src))
 
+    return images
+
 
 def reinitialize_color_order():
+    colorOptionsHSV = []
+    colorOutput = []
+
     with open("colordump", "rb") as f:
-        global colorOptions
         colorOptions = pickle.load(f)
 
     for color in colorOptions:
@@ -43,8 +49,23 @@ def reinitialize_color_order():
     for colorVal in colorOptions:
         colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
 
+    colorOptions.append((1, 1, 1))
+    colorOptionsHSV.append(colors.rgb_to_hsv((1, 1, 1)))
+    colorOutput.append((255, 255, 255))
 
-def extract_data(image):
+    cmap = colors.ListedColormap(colorOptions)
+
+    # Save the colormap to a file
+    gradient = np.linspace(0, 1, 384)
+    gradient = np.vstack((gradient, gradient))
+    fig, ax = plt.subplots(1, 1, figsize=(5, 1))
+    ax.imshow(gradient, aspect='auto', cmap=cmap)
+    plt.savefig('images/' + 'output_colorsPlot.png', bbox_inches='tight', pad_inches=0)
+
+    return colorOptions, colorOptionsHSV, colorOutput
+
+
+def extract_data(image, hsv=False):
     values = np.arange(Const.MIN_ELEVATION, Const.MAX_ELEVATION + 1, Const.NUM_VALS_PER_INTERVAL)
 
     size = Const.LAND_SIZE * Const.UPSCALE
@@ -63,9 +84,11 @@ def extract_data(image):
     # Divide by 'upscale^2' to get the average value for each block
     image_downscale /= (Const.UPSCALE ** 2)
 
+    colorOptionChoice = colorOptionsHSV if hsv else colorOptions
+
     for i in range(Const.LAND_SIZE):
         for j in range(Const.LAND_SIZE):
-            land[i][j] = values[get_index_of_closest_color(image_downscale[i][j])]
+            land[i][j] = values[get_index_of_closest_color(image_downscale[i][j], colorOptionChoice, hsv=hsv)]
 
 
 def cv2_to_mpl(color):
@@ -74,13 +97,9 @@ def cv2_to_mpl(color):
     return color
 
 
-def get_index_of_closest_color(input_color, hsv=False):
-    global colorOptions, colorOptionsHSV
+def get_index_of_closest_color(input_color, colorOptionChoice, hsv):
     if hsv:
-        colorOptionChoice = colorOptionsHSV
         input_color = colors.rgb_to_hsv(input_color)
-    else:
-        colorOptionChoice = colorOptions
 
     distances = []
     for color in colorOptionChoice:
@@ -129,12 +148,10 @@ def generate_3d_visualization(name):
 
 
 if __name__ == '__main__':
-    reinitialize_color_order()
+    colorOptions, colorOptionsHSV, colorOutput = reinitialize_color_order()
     land = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE))
 
-    get_files(is_dir=False)
-
-    for file in images:
-        extract_data(file)
+    for file in get_files(is_dir=False):
+        extract_data(file, hsv=False)
         generate_2d_plot("output", save=True)
         generate_3d_visualization("output")
