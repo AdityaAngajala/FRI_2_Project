@@ -1,3 +1,4 @@
+import math
 from enum import Enum
 
 import mplcursors
@@ -6,8 +7,9 @@ import pyvista as pv
 from matplotlib import colors, pyplot as plt
 from pyvista.plotting.opts import PickerType
 
+from FRI_2_Project.utils.hilbert import gen_coords
 from encoding_decoder import get_files, reinitialize_color_order, cv2_to_mpl, get_index_of_closest_color
-from voxelGeneration import Const, enable_slicing
+from voxelGeneration import Const, enable_slicing, save_slices
 
 data = []
 colorOptions = []
@@ -30,6 +32,16 @@ def convert_image(image):
             image_mpl[i][j] = cv2_to_mpl(image[i][j])
 
     return image_mpl
+
+
+def upscale_data(downscaled_data, size):
+    downscaled_data = np.where(np.isnan(downscaled_data), -1e6, downscaled_data)  # Hack to deal with np.nans
+    data_upscale = np.full((size, size), -1).astype(float)
+    for a in range(Const.VOXEL_DOWNSCALE):
+        for b in range(Const.VOXEL_DOWNSCALE):
+            data_upscale[a::Const.VOXEL_DOWNSCALE, b::Const.VOXEL_DOWNSCALE] = downscaled_data
+    data_upscale = np.where(data_upscale == -1e6, np.nan, data_upscale)  # Undoing Hack
+    return data_upscale
 
 
 def downscale_image(image):
@@ -60,9 +72,7 @@ def extract_data(image, mode, hsv=False):
     elif mode == Mode.INTERLEAVE:
         extract_interleave()
     else:
-        extract_hilbert()
-
-    thing = data.flatten()
+        extract_hilbert(image, hsv)
 
     grid.cell_data['Colors'] = data.flatten()
     grid.cell_data['cell_ind'] = np.arange(grid.GetNumberOfCells())
@@ -90,14 +100,7 @@ def extract_slices(image, hsv=False):
                 if z_slice[i][j] > Const.NUM_COLORS:
                     z_slice[i][j] = np.nan
 
-        z_slice = np.where(np.isnan(z_slice), -1e6, z_slice)
-        slice_upscale = np.full((Const.LAND_SIZE, Const.LAND_SIZE), -1)
-        for a in range(Const.VOXEL_DOWNSCALE):
-            for b in range(Const.VOXEL_DOWNSCALE):
-                slice_upscale[a::Const.VOXEL_DOWNSCALE, b::Const.VOXEL_DOWNSCALE] = z_slice
-        slice_upscale = np.where(slice_upscale == -1e6, np.nan, slice_upscale)
-
-        data[num] = slice_upscale
+        data[num] = upscale_data(z_slice, Const.LAND_SIZE)
 
         # Create a figure with two subplots
 
@@ -107,8 +110,7 @@ def extract_slices(image, hsv=False):
         # cmap.set_bad('k', alpha=0)
         # fig, ax = plt.subplots(figsize=(8, 8))
         # ax.imshow(slice_upscale, cmap=cmap, norm=norm)
-        # plt.show()
-
+        # plt.show()l
 
 
 def extract_stacked():
@@ -119,11 +121,28 @@ def extract_interleave():
     return
 
 
-def extract_hilbert():
-    return
+def extract_hilbert(image, hsv=False):
+    hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
+    hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
+    colorOptionChoice = colorOptionsHSV if hsv else colorOptions
+    values = np.arange(0.5, Const.NUM_COLORS + 1, 1)
+
+    image = downscale_image(image)
+    downscaled_data = np.zeros((len(image), len(image)))
+    for i in range(len(image)):
+        for j in range(len(image)):
+            downscaled_data[i][j] = values[get_index_of_closest_color(image[i][j], colorOptionChoice, hsv=hsv)]
+            if downscaled_data[i][j] > Const.NUM_COLORS:
+                downscaled_data[i][j] = np.nan
+
+    encoded_data = upscale_data(downscaled_data, Const.IMAGE_HEIGHT_CAP)
+
+    for num in range(Const.LAND_SIZE ** 3):
+        data[hilbert_x[num]][hilbert_y[num]][hilbert_z[num]] = encoded_data[hilbertX[num]][hilbertY[num]]
 
 
-def display_data(image, old_noise=False, clip=False, mode=Mode.SLICES, hsv=False):
+def display_data(image, old_noise=False, clip=False, mode=Mode.SLICES, hsv=False,
+                 xSlices=False, ySlices=False, zSlices=False):
     grid, mesh = extract_data(image, mode=mode, hsv=hsv)
 
     def printInfo(ok):
@@ -137,6 +156,7 @@ def display_data(image, old_noise=False, clip=False, mode=Mode.SLICES, hsv=False
     pl = pv.Plotter()
     pl.add_mesh(mesh, show_edges=True, cmap=colors.ListedColormap(colorOptions),
                 scalars='Colors', clim=[0, Const.NUM_COLORS])
+    save_slices(data, xSlices, ySlices, zSlices)
     enable_slicing(pl, mesh, clip=clip)
     pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
     pl.show()
@@ -145,8 +165,7 @@ def display_data(image, old_noise=False, clip=False, mode=Mode.SLICES, hsv=False
 if __name__ == '__main__':
     colorOptions, colorOptionsHSV, colorOutput = reinitialize_color_order()
 
-
     data = np.full((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE), np.nan)
 
     for file in get_files(is_dir=False):
-        display_data(file, mode=Mode.SLICES, hsv=False)
+        display_data(file, mode=Mode.HILBERT, hsv=False)

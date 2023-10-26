@@ -92,7 +92,7 @@ def extract_data(image, hsv=False):
 
 
 def cv2_to_mpl(color):
-    color = np.flip(color)  # BGR to RGB
+    # color = np.flip(color)  # BGR to RGB
     color = [(x / 255) for x in color]  # to Matplot Scheme
     return color
 

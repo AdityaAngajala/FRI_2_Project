@@ -16,16 +16,15 @@ class Const:
     LAND_SIZE = 64
     NUM_COLORS = 24
     IMAGE_HEIGHT_CAP = 512
-    VOXEL_DOWNSCALE = 2
+    VOXEL_DOWNSCALE = 1
     IMAGE_UPSCALE = 1
 
 
 data = []
 colorOutput = []
-hilbert_x, hilbert_y, hilbert_z = [], [], []
-hilbertX, hilbertY = [], []
 
 
+# noinspection DuplicatedCode
 def plot_slice(plot, name, save=True):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.axis('off')
@@ -148,7 +147,7 @@ def printColInfo(column):
 def printAvgColInfo(columnSum, sparseListSum, prefilterSum, data_sparse, data_prefilter):
     print("Column: ", columnSum)
     print("Avg: ", columnSum / Const.LAND_SIZE ** 2)
-    print("Sparselist: ", sparseListSum)
+    print("SparseList: ", sparseListSum)
     print("Avg: ", sparseListSum / Const.LAND_SIZE ** 2)
     print("Max: ", np.max([len(col) for col in data_sparse]))
     print("Prefilter: ", prefilterSum)
@@ -262,6 +261,8 @@ def write_hilbert(name=''):
             else:
                 try:
                     image[hilbertX[num]][hilbertY[num]] = colorOutput[np.floor(val).astype(int)]
+                    # Flipping color channel from RGB to BGR
+                    image[hilbertX[num]][hilbertY[num]] = np.flip(image[hilbertX[num]][hilbertY[num]])
                 except IndexError:
                     print(i, j)
                     print(val)
@@ -272,6 +273,7 @@ def write_hilbert(name=''):
     # image = image.reshape(4096, 64, 3)
 
     cv2.imwrite('images3D/hilbert/' + 'hilbert' + name + '.png', upscale_image(image, upscale=1))
+
 
 def write_slices(upscale=1, name=''):
     height_cap = Const.IMAGE_HEIGHT_CAP
@@ -295,6 +297,7 @@ def write_slices(upscale=1, name=''):
     cv2.imwrite('images3D/slices/' + 'slices' + name + '.png', upscale_image(image, upscale=upscale))
 
 
+# noinspection DuplicatedCode
 def init_colors():
     # Start with a base of 20 colors taken from the nipy_spectral colormap, then add 6 more colors to the base
     cmap = colors.ListedColormap(plt.get_cmap('nipy_spectral')(np.linspace(0, 1, 20)))
@@ -349,7 +352,7 @@ def enable_slicing(pl, mesh, clip=False):
     pl.add_key_event('z', toggle_z)
 
 
-def save_slices(xSlices=False, ySlices=False, zSlices=False):
+def save_slices(data, xSlices=False, ySlices=False, zSlices=False):
     if xSlices:
         x_slices = [data[x, :, :] for x in reversed(range(Const.LAND_SIZE))]
         for num in range(len(x_slices)):
@@ -396,6 +399,7 @@ def randomize_colors(grid):
     grid.cell_data['Colors'] = colorSet
 
 
+# noinspection DuplicatedCode
 def gen_voxels(old_noise):
     # Generate Voxel Space
     x, y, z = np.indices((Const.LAND_SIZE + 1, Const.LAND_SIZE + 1, Const.LAND_SIZE + 1))
@@ -443,6 +447,7 @@ def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=
     grid, mesh = gen_voxels(old_noise)
     print("Generated Voxels")
 
+    # noinspection DuplicatedCode
     def printInfo(ok):
         if pl.picked_cell:
             coords = np.floor(pl.picked_cell.center).astype(int)
@@ -451,27 +456,23 @@ def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=
             indexColor = list(grid.cell_data['cell_ind']).index(ind)
             print("Color: ", (grid.cell_data['Colors'])[indexColor])
 
-    # pl = pv.Plotter()
-    # pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
-    # enable_slicing(pl, mesh, clip=clip)
+    pl = pv.Plotter()
+    pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
+    enable_slicing(pl, mesh, clip=clip)
     # pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
-    # save_slices(xSlices, ySlices, zSlices)
+    save_slices(data, xSlices, ySlices, zSlices)
     # data_sparse = sparse_data(data)
     # plot_sparse_interleave(data_sparse, name=name)
     # plot_sparse_stacked(data_sparse, name=name)
     write_slices(name=name)
     write_hilbert(name=name)
 
-    # pl.show(auto_close=False)
+    pl.show(auto_close=False)
 
 
 if __name__ == '__main__':
     hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
     hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
-    for num in range(30):
-
-        generate(old_noise=False, clip=False, xSlices=True, zSlices=True, name=str(num))
+    for num in range(1):
+        generate(old_noise=False, clip=False, name=str(num))
         print("PROGRESS: " + str(num + 1) + " / 30")
-
-
-
