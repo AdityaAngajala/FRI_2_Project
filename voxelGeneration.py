@@ -9,6 +9,7 @@ from matplotlib import colors
 from pyvista.plotting.opts import PickerType
 from FRI_2_Project.utils.hilbert import gen_coords
 import pyvista as pv
+
 from topologyLabelGeneration import generate_terrain
 
 
@@ -19,8 +20,8 @@ class Const:
     MIN_ELEVATION = -32
     MAX_ELEVATION = 31
     NUM_INTERVALS = 12
-    NUM_VALS_PER_INTERVAL = 1 # math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
-    VOXEL_DOWNSCALE = 2
+    NUM_VALS_PER_INTERVAL = 1  # math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
+    VOXEL_DOWNSCALE = 1
     IMAGE_UPSCALE = 1
 
 
@@ -44,7 +45,6 @@ def plot_slice(plot, name, save=True, plotTerrain=False):
         ax.imshow(plot, cmap=cmap, norm=norm)
     else:
         ax.imshow(plot, cmap='terrain')
-
 
     if save:
         plt.savefig('images3D/' + str(name) + 'Plot.png', bbox_inches='tight', pad_inches=0)
@@ -240,6 +240,16 @@ def upscale_image(image, upscale=1):
     return image_upscale
 
 
+def upscale_data(downscaled_data, size, upscale):
+    downscaled_data = np.where(np.isnan(downscaled_data), -1e6, downscaled_data)  # Hack to deal with np.nans
+    data_upscale = np.full((size, size), -1).astype(float)
+    for a in range(upscale):
+        for b in range(upscale):
+            data_upscale[a::upscale, b::upscale] = downscaled_data
+    data_upscale = np.where(data_upscale == -1e6, np.nan, data_upscale)  # Undoing Hack
+    return data_upscale
+
+
 def upscale_voxel(voxel, upscale=1):
     shape = np.multiply(voxel.shape, upscale)
     voxel_upscale = np.full(shape, np.nan)
@@ -374,6 +384,7 @@ def save_slices(data, xSlices=False, ySlices=False, zSlices=False):
         for num in range(len(z_slices)):
             plot_slice(z_slices[num], "zSlice" + str(num))
 
+
 def gen_voxel_colors(grid, downscale=1):
     freq = (random.randrange(150, 300) / 100, random.randrange(150, 300) / 100, random.randrange(150, 300) / 100)
     noise3D = pv.perlin_noise(1, freq, (0, 0, 0))
@@ -417,12 +428,14 @@ def gen_voxels(old_noise, name=None, plotTerrain=False):
     if old_noise:
         # Make Land Generation
         height_map = generate_terrain(name, MAX_ELEVATION=Const.MAX_ELEVATION, MIN_ELEVATION=Const.MIN_ELEVATION,
-                                      NUM_VALS_PER_INTERVAL=Const.NUM_VALS_PER_INTERVAL, LAND_SIZE=Const.LAND_SIZE,
+                                      NUM_VALS_PER_INTERVAL=Const.VOXEL_DOWNSCALE,
+                                      LAND_SIZE=Const.LAND_SIZE // Const.VOXEL_DOWNSCALE,
                                       max_hills=4, min_hills=2, max_basins=2, min_basins=2, noise_normalize=12,
                                       radius_min=8, radius_max=16,
                                       min_height=15, max_height=25)
+        height_map = upscale_data(height_map, Const.LAND_SIZE, upscale=Const.VOXEL_DOWNSCALE)
 
-        height_map += 32 # Moving min to 0
+        height_map += 32  # Moving min to 0
         terrain = np.logical_and(x >= 0, z < height_map[:, :, np.newaxis])  # 3D-bool array based on height map
 
         if plotTerrain:

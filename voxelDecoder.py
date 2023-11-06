@@ -9,7 +9,7 @@ from pyvista.plotting.opts import PickerType
 
 from FRI_2_Project.utils.hilbert import gen_coords
 from encoding_decoder import get_files, reinitialize_color_order, cv2_to_mpl, get_index_of_closest_color
-from voxelGeneration import Const, enable_slicing, save_slices
+from voxelGeneration import Const, enable_slicing, save_slices, upscale_data
 
 data = []
 colorOptions = []
@@ -32,16 +32,6 @@ def convert_image(image):
             image_mpl[i][j] = cv2_to_mpl(image[i][j])
 
     return image_mpl
-
-
-def upscale_data(downscaled_data, size):
-    downscaled_data = np.where(np.isnan(downscaled_data), -1e6, downscaled_data)  # Hack to deal with np.nans
-    data_upscale = np.full((size, size), -1).astype(float)
-    for a in range(Const.VOXEL_DOWNSCALE):
-        for b in range(Const.VOXEL_DOWNSCALE):
-            data_upscale[a::Const.VOXEL_DOWNSCALE, b::Const.VOXEL_DOWNSCALE] = downscaled_data
-    data_upscale = np.where(data_upscale == -1e6, np.nan, data_upscale)  # Undoing Hack
-    return data_upscale
 
 
 def downscale_image(image):
@@ -100,7 +90,7 @@ def extract_slices(image, hsv=False):
                 if z_slice[i][j] > Const.NUM_COLORS:
                     z_slice[i][j] = np.nan
 
-        data[num] = upscale_data(z_slice, Const.LAND_SIZE)
+        data[num] = upscale_data(z_slice, Const.LAND_SIZE, upscale=Const.VOXEL_DOWNSCALE)
 
         # Create a figure with two subplots
 
@@ -135,7 +125,7 @@ def extract_hilbert(image, hsv=False):
             if downscaled_data[i][j] > Const.NUM_COLORS:
                 downscaled_data[i][j] = np.nan
 
-    encoded_data = upscale_data(downscaled_data, Const.IMAGE_HEIGHT_CAP)
+    encoded_data = upscale_data(downscaled_data, Const.IMAGE_HEIGHT_CAP, upscale=Const.VOXEL_DOWNSCALE)
 
     for num in range(Const.LAND_SIZE ** 3):
         data[hilbert_x[num]][hilbert_y[num]][hilbert_z[num]] = encoded_data[hilbertX[num]][hilbertY[num]]
