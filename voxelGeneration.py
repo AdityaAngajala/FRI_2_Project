@@ -9,14 +9,18 @@ from matplotlib import colors
 from pyvista.plotting.opts import PickerType
 from FRI_2_Project.utils.hilbert import gen_coords
 import pyvista as pv
-from topologyLabelGeneration import generate_noise
+from topologyLabelGeneration import generate_terrain
 
 
 class Const:
     LAND_SIZE = 64
     NUM_COLORS = 24
     IMAGE_HEIGHT_CAP = 512
-    VOXEL_DOWNSCALE = 1
+    MIN_ELEVATION = -32
+    MAX_ELEVATION = 31
+    NUM_INTERVALS = 12
+    NUM_VALS_PER_INTERVAL = 1 # math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
+    VOXEL_DOWNSCALE = 2
     IMAGE_UPSCALE = 1
 
 
@@ -25,18 +29,22 @@ colorOutput = []
 
 
 # noinspection DuplicatedCode
-def plot_slice(plot, name, save=True):
+def plot_slice(plot, name, save=True, plotTerrain=False):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.axis('off')
 
     if np.isnan(plot).all():
         return
 
-    cmap = init_colors()
-    bounds = np.arange(0, Const.NUM_COLORS + 1, 1)
-    norm = colors.BoundaryNorm(bounds, cmap.N)
-    cmap.set_bad('k', alpha=0)
-    ax.imshow(plot, cmap=cmap, norm=norm)
+    if not plotTerrain:
+        cmap = init_colors()
+        bounds = np.arange(0, Const.NUM_COLORS + 1, 1)
+        norm = colors.BoundaryNorm(bounds, cmap.N)
+        cmap.set_bad('k', alpha=0)
+        ax.imshow(plot, cmap=cmap, norm=norm)
+    else:
+        ax.imshow(plot, cmap='terrain')
+
 
     if save:
         plt.savefig('images3D/' + str(name) + 'Plot.png', bbox_inches='tight', pad_inches=0)
@@ -366,24 +374,16 @@ def save_slices(data, xSlices=False, ySlices=False, zSlices=False):
         for num in range(len(z_slices)):
             plot_slice(z_slices[num], "zSlice" + str(num))
 
-
-def generate_terrain():
-    height_map = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE)).astype('float64')
-    height_map += generate_noise(size=Const.LAND_SIZE)
-    height_map = height_map / np.max(np.abs(height_map)) * Const.LAND_SIZE * (40 / 128)
-    return height_map
-
-
-def gen_voxel_colors(grid, upscale=1):
-    freq = (random.randrange(150, 500) / 100, random.randrange(150, 500) / 100, random.randrange(150, 500) / 100)
+def gen_voxel_colors(grid, downscale=1):
+    freq = (random.randrange(150, 300) / 100, random.randrange(150, 300) / 100, random.randrange(150, 300) / 100)
     noise3D = pv.perlin_noise(1, freq, (0, 0, 0))
 
-    dimShape = (Const.LAND_SIZE // upscale, Const.LAND_SIZE // upscale, Const.LAND_SIZE // upscale)
+    dimShape = (Const.LAND_SIZE // downscale, Const.LAND_SIZE // downscale, Const.LAND_SIZE // downscale)
 
     grid2 = pv.sample_function(noise3D, [-1, 1.0, -1, 1.0, -1, 1.0], dim=dimShape)
 
     colorThing = (np.array(grid2['scalars'])).reshape(dimShape)
-    colorThing = upscale_voxel(colorThing, upscale).flatten()
+    colorThing = upscale_voxel(colorThing, downscale).flatten()
 
     grid.cell_data['Colors'] = (np.round(colorThing * (Const.NUM_COLORS - 1))) - 0.5
     grid.cell_data['Colors'] = np.where(grid.cell_data['Colors'] > 0, grid.cell_data['Colors'], -0.5)
@@ -400,7 +400,7 @@ def randomize_colors(grid):
 
 
 # noinspection DuplicatedCode
-def gen_voxels(old_noise):
+def gen_voxels(old_noise, name=None, plotTerrain=False):
     # Generate Voxel Space
     x, y, z = np.indices((Const.LAND_SIZE + 1, Const.LAND_SIZE + 1, Const.LAND_SIZE + 1))
     grid = pv.StructuredGrid(z, y, x)
@@ -416,8 +416,18 @@ def gen_voxels(old_noise):
     global data
     if old_noise:
         # Make Land Generation
-        height_map = generate_terrain()
+        height_map = generate_terrain(name, MAX_ELEVATION=Const.MAX_ELEVATION, MIN_ELEVATION=Const.MIN_ELEVATION,
+                                      NUM_VALS_PER_INTERVAL=Const.NUM_VALS_PER_INTERVAL, LAND_SIZE=Const.LAND_SIZE,
+                                      max_hills=4, min_hills=2, max_basins=2, min_basins=2, noise_normalize=12,
+                                      radius_min=8, radius_max=16,
+                                      min_height=15, max_height=25)
+
+        height_map += 32 # Moving min to 0
         terrain = np.logical_and(x >= 0, z < height_map[:, :, np.newaxis])  # 3D-bool array based on height map
+
+        if plotTerrain:
+            plot_slice(height_map, name, save=False, plotTerrain=plotTerrain)
+            plt.show()
 
         mesh = grid.cast_to_unstructured_grid()
         mesh.remove_cells(np.invert(terrain).flatten(), inplace=True)
@@ -443,8 +453,8 @@ def gen_voxels(old_noise):
     return grid, mesh
 
 
-def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=False, name=""):
-    grid, mesh = gen_voxels(old_noise)
+def generate(old_noise=False, clip=False, plotTerrain=False, xSlices=False, ySlices=False, zSlices=False, name=""):
+    grid, mesh = gen_voxels(old_noise, plotTerrain=plotTerrain)
     print("Generated Voxels")
 
     # noinspection DuplicatedCode
@@ -459,20 +469,20 @@ def generate(old_noise=False, clip=False, xSlices=False, ySlices=False, zSlices=
     pl = pv.Plotter()
     pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
     enable_slicing(pl, mesh, clip=clip)
-    # pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
-    save_slices(data, xSlices, ySlices, zSlices)
+    pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
+    # save_slices(data, xSlices, ySlices, zSlices)
     # data_sparse = sparse_data(data)
     # plot_sparse_interleave(data_sparse, name=name)
     # plot_sparse_stacked(data_sparse, name=name)
     write_slices(name=name)
-    write_hilbert(name=name)
+    # write_hilbert(name=name)
 
     pl.show(auto_close=False)
 
 
 if __name__ == '__main__':
-    hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
-    hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
-    for num in range(1):
-        generate(old_noise=False, clip=False, name=str(num))
+    # hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
+    # hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
+    for num in range(50):
+        generate(old_noise=True, clip=False, name=str(num), plotTerrain=True)
         print("PROGRESS: " + str(num + 1) + " / 30")
