@@ -169,9 +169,9 @@ def reinitialize_color_order():
     plt.savefig('images/' + 'colorsPlot.png', bbox_inches='tight', pad_inches=0)
 
 
-def save_color_order():
+def save_color_order(saveThing=colorOptions):
     with open("colordump", "wb") as f:
-        pickle.dump(colorOptions, f)
+        pickle.dump(saveThing, f)
 
 
 def generate_2d_plot(data, name, save=False):
@@ -240,7 +240,8 @@ def generate_feature(data, generator, height_opt_arr, taken, f, name, land_size=
     width_opt = random.randrange(len(widthOptions))
     rand_coord, randomRadius, randomHeight = gen_rand_attributes(quad_x, quad_y, height_opt, width_opt,
                                                                  radius_min=radius_min, radius_max=radius_max,
-                                                                 min_height=min_height, max_height=max_height, )
+                                                                 min_height=min_height, max_height=max_height,
+                                                                 land_size=land_size)
     data = generator(data, randomRadius, randomHeight, rand_coord[0], rand_coord[1], land_size=land_size)
     posX, posY = posXOptions[quad_x], posYOptions[quad_y]
     label = f"A {height_opt_arr[height_opt]}, {widthOptions[width_opt]} {name} in the {posY}-{posX}"

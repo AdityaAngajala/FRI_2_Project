@@ -51,7 +51,7 @@ def downscale_image(image):
 
 def extract_data(image, mode, hsv=False):
     x, y, z = np.indices((Const.LAND_SIZE + 1, Const.LAND_SIZE + 1, Const.LAND_SIZE + 1))
-    grid = pv.StructuredGrid(z, y, x)
+    grid = pv.StructuredGrid(x, y, z)
 
     image = convert_image(image)
 
@@ -145,7 +145,7 @@ def display_data(image, old_noise=False, clip=False, mode=Mode.SLICES, hsv=False
 
     pl = pv.Plotter()
     pl.add_mesh(mesh, show_edges=True, cmap=colors.ListedColormap(colorOptions),
-                scalars='Colors', clim=[0, Const.NUM_COLORS])
+                scalars='Colors', clim=[0, Const.NUM_COLORS + 1])
     save_slices(data, xSlices, ySlices, zSlices)
     enable_slicing(pl, mesh, clip=clip)
     pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
@@ -158,4 +158,4 @@ if __name__ == '__main__':
     data = np.full((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE), np.nan)
 
     for file in get_files(is_dir=False):
-        display_data(file, mode=Mode.HILBERT, hsv=False)
+        display_data(file, mode=Mode.SLICES, hsv=False, clip=True)

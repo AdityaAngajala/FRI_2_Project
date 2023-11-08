@@ -9,8 +9,9 @@ from matplotlib import colors
 from pyvista.plotting.opts import PickerType
 from FRI_2_Project.utils.hilbert import gen_coords
 import pyvista as pv
+import os
 
-from topologyLabelGeneration import generate_terrain
+from topologyLabelGeneration import generate_terrain, save_color_order
 
 
 class Const:
@@ -21,7 +22,7 @@ class Const:
     MAX_ELEVATION = 31
     NUM_INTERVALS = 12
     NUM_VALS_PER_INTERVAL = 1  # math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
-    VOXEL_DOWNSCALE = 1
+    VOXEL_DOWNSCALE = 2
     IMAGE_UPSCALE = 1
 
 
@@ -34,8 +35,8 @@ def plot_slice(plot, name, save=True, plotTerrain=False):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.axis('off')
 
-    if np.isnan(plot).all():
-        return
+    # if np.isnan(plot).all():
+    #     return
 
     if not plotTerrain:
         cmap = init_colors()
@@ -305,14 +306,32 @@ def write_slices(upscale=1, name=''):
                 outputI = ((num % 8) * Const.LAND_SIZE) + i
                 outputJ = ((num // 8) * Const.LAND_SIZE) + j
                 # print("I,J: ", outputI, ", ", outputJ)
-                if np.isnan(z_slice[i][j]):
-                    image[outputI][outputJ] = (255, 255, 255)
-                else:
-                    image[outputI][outputJ] = colorOutput[np.floor(z_slice[i][j]).astype(int)]
-                    # Flipping color channel from RGB to BGR
-                    image[outputI][outputJ] = np.flip(image[outputI][outputJ])
+                image[outputI][outputJ] = color_from_val(z_slice[i][j])
 
     cv2.imwrite('images3D/slices/' + 'slices' + name + '.png', upscale_image(image, upscale=upscale))
+
+
+def write_expanded_slices(upscale=1, name=''):
+    image = np.full((Const.LAND_SIZE, Const.LAND_SIZE, 3), np.nan)
+    z_slices = [data[:, :, z] for z in range(Const.LAND_SIZE)]
+    for num in range(len(z_slices)):
+        z_slice = z_slices[num]
+        for i in range(Const.LAND_SIZE):
+            for j in range(Const.LAND_SIZE):
+                image[i][j] = color_from_val(z_slice[i][j])
+
+        folder_name = 'images3D/layerGroups/' + name
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+
+        cv2.imwrite(folder_name + '/layer' + str(num) + '_Gen' + name + '.png', upscale_image(image, upscale=upscale))
+
+
+def color_from_val(val):
+    if np.isnan(val):
+        return 255, 255, 255
+
+    return np.flip(colorOutput[np.floor(val).astype(int)])
 
 
 # noinspection DuplicatedCode
@@ -333,6 +352,8 @@ def init_colors():
     if len(colorOutput) == 0:
         for colorVal in colorOptions:
             colorOutput.append(tuple(int(255 * val) for val in colors.ColorConverter.to_rgb(colorVal)))
+
+    save_color_order(saveThing=colorOptions)
 
     return colors.ListedColormap(colorOptions)
 
@@ -428,10 +449,11 @@ def gen_voxels(old_noise, name=None, plotTerrain=False):
     if old_noise:
         # Make Land Generation
         height_map = generate_terrain(name, MAX_ELEVATION=Const.MAX_ELEVATION, MIN_ELEVATION=Const.MIN_ELEVATION,
-                                      NUM_VALS_PER_INTERVAL=Const.VOXEL_DOWNSCALE,
+                                      NUM_VALS_PER_INTERVAL=1,
                                       LAND_SIZE=Const.LAND_SIZE // Const.VOXEL_DOWNSCALE,
-                                      max_hills=4, min_hills=2, max_basins=2, min_basins=2, noise_normalize=12,
-                                      radius_min=8, radius_max=16,
+                                      max_hills=2, min_hills=2, max_basins=1, min_basins=1,
+                                      noise_normalize=(Const.LAND_SIZE // (3 + Const.VOXEL_DOWNSCALE)),
+                                      radius_min=8 // Const.VOXEL_DOWNSCALE, radius_max=16 // Const.VOXEL_DOWNSCALE,
                                       min_height=15, max_height=25)
         height_map = upscale_data(height_map, Const.LAND_SIZE, upscale=Const.VOXEL_DOWNSCALE)
 
@@ -467,7 +489,7 @@ def gen_voxels(old_noise, name=None, plotTerrain=False):
 
 
 def generate(old_noise=False, clip=False, plotTerrain=False, xSlices=False, ySlices=False, zSlices=False, name=""):
-    grid, mesh = gen_voxels(old_noise, plotTerrain=plotTerrain)
+    grid, mesh = gen_voxels(old_noise, plotTerrain=plotTerrain, name=name)
     print("Generated Voxels")
 
     # noinspection DuplicatedCode
@@ -479,23 +501,24 @@ def generate(old_noise=False, clip=False, plotTerrain=False, xSlices=False, ySli
             indexColor = list(grid.cell_data['cell_ind']).index(ind)
             print("Color: ", (grid.cell_data['Colors'])[indexColor])
 
-    pl = pv.Plotter()
-    pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
-    enable_slicing(pl, mesh, clip=clip)
-    pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
-    # save_slices(data, xSlices, ySlices, zSlices)
+    # pl = pv.Plotter()
+    # pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
+    # enable_slicing(pl, mesh, clip=clip)
+    # pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
+    save_slices(data, xSlices, ySlices, zSlices)
     # data_sparse = sparse_data(data)
     # plot_sparse_interleave(data_sparse, name=name)
     # plot_sparse_stacked(data_sparse, name=name)
     write_slices(name=name)
+    write_expanded_slices(name=name, upscale=8)
     # write_hilbert(name=name)
 
-    pl.show(auto_close=False)
+    # pl.show(auto_close=False)
 
 
 if __name__ == '__main__':
     # hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
     # hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
     for num in range(50):
-        generate(old_noise=True, clip=False, name=str(num), plotTerrain=True)
+        generate(old_noise=True, clip=False, name=str(num), plotTerrain=False)
         print("PROGRESS: " + str(num + 1) + " / 30")
