@@ -16,13 +16,13 @@ from topologyLabelGeneration import generate_terrain, save_color_order
 
 class Const:
     LAND_SIZE = 64
-    NUM_COLORS = 24
+    NUM_COLORS = 48
     IMAGE_HEIGHT_CAP = 512
     MIN_ELEVATION = -32
     MAX_ELEVATION = 31
     NUM_INTERVALS = 12
     NUM_VALS_PER_INTERVAL = 1  # math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
-    VOXEL_DOWNSCALE = 2
+    VOXEL_DOWNSCALE = 1
     IMAGE_UPSCALE = 1
 
 
@@ -311,16 +311,16 @@ def write_slices(upscale=1, name=''):
     cv2.imwrite('images3D/slices/' + 'slices' + name + '.png', upscale_image(image, upscale=upscale))
 
 
-def write_expanded_slices(upscale=1, name=''):
+def write_expanded_slices(upscale=1, name='', seperated=True):
     image = np.full((Const.LAND_SIZE, Const.LAND_SIZE, 3), np.nan)
     z_slices = [data[:, :, z] for z in range(Const.LAND_SIZE)]
-    for num in range(len(z_slices)):
+    for num in np.arange(0, len(z_slices), 2):
         z_slice = z_slices[num]
         for i in range(Const.LAND_SIZE):
             for j in range(Const.LAND_SIZE):
                 image[i][j] = color_from_val(z_slice[i][j])
 
-        folder_name = 'images3D/layerGroups/' + name
+        folder_name = 'images3D/layerGroups/' + str(num) if seperated else 'images3D/layerGroups/' + name
         if not os.path.exists(folder_name):
             os.makedirs(folder_name)
 
@@ -335,19 +335,25 @@ def color_from_val(val):
 
 
 # noinspection DuplicatedCode
-def init_colors():
+def init_colors(num_colors=Const.NUM_COLORS):
     # Start with a base of 20 colors taken from the nipy_spectral colormap, then add 6 more colors to the base
-    cmap = colors.ListedColormap(plt.get_cmap('nipy_spectral')(np.linspace(0, 1, 20)))
-    cmap2 = colors.ListedColormap(
-        colors.ListedColormap(['chocolate', 'darkgreen', 'maroon',
-                               'slategray', 'fuchsia', 'hotpink', 'goldenrod'])(np.linspace(0, 1, 7)))
-    colorOptions = np.concatenate([cmap.colors, cmap2.colors])
 
-    # Remove the colors that are too similar to each other and shuffle the list
-    colorOptions = list(colorOptions)
-    colorOptions.pop(10)
-    colorOptions.pop(11)
-    colorOptions.pop(12)
+    if num_colors > 24:
+        cmap = colors.ListedColormap(plt.get_cmap('nipy_spectral')(np.linspace(0, 1, Const.NUM_COLORS)))
+        colorOptions = list(cmap.colors)
+
+    else:
+        cmap = colors.ListedColormap(plt.get_cmap('nipy_spectral')(np.linspace(0, 1, 20)))
+        cmap2 = colors.ListedColormap(
+            colors.ListedColormap(['chocolate', 'darkgreen', 'maroon',
+                                   'slategray', 'fuchsia', 'hotpink', 'goldenrod'])(np.linspace(0, 1, 7)))
+        colorOptions = np.concatenate([cmap.colors, cmap2.colors])
+
+        # Remove the colors that are too similar to each other and shuffle the list
+        colorOptions = list(colorOptions)
+        colorOptions.pop(10)
+        colorOptions.pop(11)
+        colorOptions.pop(12)
 
     if len(colorOutput) == 0:
         for colorVal in colorOptions:
@@ -424,6 +430,20 @@ def gen_voxel_colors(grid, downscale=1):
     grid.cell_data['cell_ind'] = np.arange(grid.GetNumberOfCells())
 
 
+def split_colors(grid, mesh):
+    half_one = (grid.cell_data['Colors'] + 0.5) // 12  # Base 24, for the 24 custom colors we are using
+    half_two = (grid.cell_data['Colors'] + 0.5) % 12
+
+    new_mesh_one = mesh.copy()
+    new_mesh_two = mesh.copy()
+
+    for mesh_ind in range(len(mesh.cell_data['cell_ind'])):
+        new_mesh_one.cell_data['Colors'][mesh_ind] = half_one[new_mesh_one.cell_data['cell_ind'][mesh_ind]]
+        new_mesh_two.cell_data['Colors'][mesh_ind] = half_two[new_mesh_two.cell_data['cell_ind'][mesh_ind]]
+
+    return new_mesh_one, new_mesh_two
+
+
 def randomize_colors(grid):
     # Randomize Color of Each Block
     colorSet = np.random.randint(0, Const.NUM_COLORS + 1, np.arange(0, grid.GetNumberOfCells(), 1).shape).astype(float)
@@ -448,16 +468,32 @@ def gen_voxels(old_noise, name=None, plotTerrain=False):
     global data
     if old_noise:
         # Make Land Generation
+        # if random.randrange(0, 10) > 5:
+        #     hillsMax = 2
+        #     hillsMin = 2
+        #     basinMax = 0
+        #     basinMin = 0
+        # else:
+        #     hillsMax = 0
+        #     hillsMin = 0
+        #     basinMax = 2
+        #     basinMin = 2
+
+        hillsMax = 2
+        hillsMin = 1
+        basinMax = 2
+        basinMin = 1
+
         height_map = generate_terrain(name, MAX_ELEVATION=Const.MAX_ELEVATION, MIN_ELEVATION=Const.MIN_ELEVATION,
                                       NUM_VALS_PER_INTERVAL=1,
                                       LAND_SIZE=Const.LAND_SIZE // Const.VOXEL_DOWNSCALE,
-                                      max_hills=2, min_hills=2, max_basins=1, min_basins=1,
+                                      max_hills=hillsMax, min_hills=hillsMin, max_basins=basinMax, min_basins=basinMin,
                                       noise_normalize=(Const.LAND_SIZE // (3 + Const.VOXEL_DOWNSCALE)),
                                       radius_min=8 // Const.VOXEL_DOWNSCALE, radius_max=16 // Const.VOXEL_DOWNSCALE,
                                       min_height=15, max_height=25)
         height_map = upscale_data(height_map, Const.LAND_SIZE, upscale=Const.VOXEL_DOWNSCALE)
 
-        height_map += 32  # Moving min to 0
+        height_map += Const.LAND_SIZE / 2  # Moving min to 0, comes from height of 64 cube
         terrain = np.logical_and(x >= 0, z < height_map[:, :, np.newaxis])  # 3D-bool array based on height map
 
         if plotTerrain:
@@ -483,12 +519,12 @@ def gen_voxels(old_noise, name=None, plotTerrain=False):
         print("Terrain Made")
 
     data = np.where(data < 0, 0, data)
-    data = np.where(data > 23.5, 23.5, data)
+    data = np.where(data > Const.NUM_COLORS - 0.5, Const.NUM_COLORS - 0.5, data)
 
     return grid, mesh
 
 
-def generate(old_noise=False, clip=False, plotTerrain=False, xSlices=False, ySlices=False, zSlices=False, name=""):
+def generate(old_noise=False, clip=False, plotTerrain=False, xCuts=False, yCuts=False, zCuts=False, name="", split=False):
     grid, mesh = gen_voxels(old_noise, plotTerrain=plotTerrain, name=name)
     print("Generated Voxels")
 
@@ -501,24 +537,33 @@ def generate(old_noise=False, clip=False, plotTerrain=False, xSlices=False, ySli
             indexColor = list(grid.cell_data['cell_ind']).index(ind)
             print("Color: ", (grid.cell_data['Colors'])[indexColor])
 
-    # pl = pv.Plotter()
-    # pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
-    # enable_slicing(pl, mesh, clip=clip)
-    # pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
-    save_slices(data, xSlices, ySlices, zSlices)
+    pl = pv.Plotter()
+    if split:
+        mesh2, mesh3 = split_colors(grid, mesh)
+        pl.add_mesh(mesh2.translate((80, 0, 0), inplace=True), show_edges=True, cmap=init_colors(num_colors=24),
+                    scalars='Colors', clim=[0, 24])
+        pl.add_mesh(mesh3.translate((-80, 0, 0), inplace=True), show_edges=True, cmap=init_colors(num_colors=24),
+                    scalars='Colors', clim=[0, 24])
+    else:
+        pl.add_mesh(mesh, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS])
+
+
+    enable_slicing(pl, mesh, clip=clip)
+    pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
+    save_slices(data, xCuts, yCuts, zCuts)
     # data_sparse = sparse_data(data)
     # plot_sparse_interleave(data_sparse, name=name)
     # plot_sparse_stacked(data_sparse, name=name)
-    write_slices(name=name)
-    write_expanded_slices(name=name, upscale=8)
+    # write_slices(name=name)
+    # write_expanded_slices(name=name, upscale=8, seperated=False)
     # write_hilbert(name=name)
 
-    # pl.show(auto_close=False)
+    pl.show(auto_close=False)
 
 
 if __name__ == '__main__':
     # hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
     # hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
     for num in range(50):
-        generate(old_noise=True, clip=False, name=str(num), plotTerrain=False)
+        generate(old_noise=True, clip=False, name=str(num), plotTerrain=False, split=False)
         print("PROGRESS: " + str(num + 1) + " / 30")
