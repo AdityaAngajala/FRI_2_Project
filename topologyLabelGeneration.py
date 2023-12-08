@@ -244,11 +244,14 @@ def generate_feature(data, generator, height_opt_arr, taken, f, name, land_size=
                                                                  land_size=land_size)
     data = generator(data, randomRadius, randomHeight, rand_coord[0], rand_coord[1], land_size=land_size)
     posX, posY = posXOptions[quad_x], posYOptions[quad_y]
-    label = f"A {height_opt_arr[height_opt]}, {widthOptions[width_opt]} {name} in the {posY}-{posX}"
+    label = f"A {height_opt_arr[height_opt]}, {widthOptions[width_opt]} {name}" # in the {posY}-{posX}"
+    if height_opt_arr[height_opt] == "" and widthOptions[width_opt] == "":
+        label = f"A normal {name}"
     label = re.sub(" , ", ' ', label)
     label = re.sub(",  ", ' ', label)
     label = re.sub(r'\s{2,}', ' ', label)
-    f.write(label + '\n')
+    # label = f"{name}s"
+    f.write(label + ', ')
     return data
 
 
@@ -268,7 +271,7 @@ def generate_terrain(name, min_hills=0, max_hills=3, min_basins=0, max_basins=3,
     basinCount = random.randint(min_basins, max_basins)
 
     f = open('labels/' + str(name) + ".txt", "w")
-    f.write("hbEncStyle\n")
+    f.write("ffgl style, ")
 
     taken = [*range(9)]
 

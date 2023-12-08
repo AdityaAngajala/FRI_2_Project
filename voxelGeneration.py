@@ -16,13 +16,13 @@ from topologyLabelGeneration import generate_terrain, save_color_order
 
 class Const:
     LAND_SIZE = 64
-    NUM_COLORS = 48
+    NUM_COLORS = 24
     IMAGE_HEIGHT_CAP = 512
     MIN_ELEVATION = -32
     MAX_ELEVATION = 31
     NUM_INTERVALS = 12
     NUM_VALS_PER_INTERVAL = 1  # math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
-    VOXEL_DOWNSCALE = 1
+    VOXEL_DOWNSCALE = 2
     IMAGE_UPSCALE = 1
 
 
@@ -308,7 +308,7 @@ def write_slices(upscale=1, name=''):
                 # print("I,J: ", outputI, ", ", outputJ)
                 image[outputI][outputJ] = color_from_val(z_slice[i][j])
 
-    cv2.imwrite('images3D/slices/' + 'slices' + name + '.png', upscale_image(image, upscale=upscale))
+    cv2.imwrite('images3D/slices/' + name + '.png', upscale_image(image, upscale=upscale))
 
 
 def write_expanded_slices(upscale=1, name='', seperated=True):
@@ -468,21 +468,21 @@ def gen_voxels(old_noise, name=None, plotTerrain=False):
     global data
     if old_noise:
         # Make Land Generation
-        # if random.randrange(0, 10) > 5:
-        #     hillsMax = 2
-        #     hillsMin = 2
-        #     basinMax = 0
-        #     basinMin = 0
-        # else:
-        #     hillsMax = 0
-        #     hillsMin = 0
-        #     basinMax = 2
-        #     basinMin = 2
+        if random.randrange(0, 10) > 5:
+            hillsMax = 2
+            hillsMin = 2
+            basinMax = 0
+            basinMin = 0
+        else:
+            hillsMax = 0
+            hillsMin = 0
+            basinMax = 2
+            basinMin = 2
 
-        hillsMax = 2
-        hillsMin = 1
-        basinMax = 2
-        basinMin = 1
+        # hillsMax = 2
+        # hillsMin = 1
+        # basinMax = 2
+        # basinMin = 1
 
         height_map = generate_terrain(name, MAX_ELEVATION=Const.MAX_ELEVATION, MIN_ELEVATION=Const.MIN_ELEVATION,
                                       NUM_VALS_PER_INTERVAL=1,
@@ -550,20 +550,20 @@ def generate(old_noise=False, clip=False, plotTerrain=False, xCuts=False, yCuts=
 
     enable_slicing(pl, mesh, clip=clip)
     pl.enable_element_picking(pickable_window=True, picker=PickerType.CELL, tolerance=0.001, callback=printInfo)
-    save_slices(data, xCuts, yCuts, zCuts)
+    # save_slices(data, xCuts, yCuts, zCuts)
     # data_sparse = sparse_data(data)
     # plot_sparse_interleave(data_sparse, name=name)
     # plot_sparse_stacked(data_sparse, name=name)
-    # write_slices(name=name)
+    write_slices(name=name)
     # write_expanded_slices(name=name, upscale=8, seperated=False)
     # write_hilbert(name=name)
 
-    pl.show(auto_close=False)
+    # pl.show(auto_close=False)
 
 
 if __name__ == '__main__':
     # hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
     # hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
-    for num in range(50):
+    for num in range(100):
         generate(old_noise=True, clip=False, name=str(num), plotTerrain=False, split=False)
         print("PROGRESS: " + str(num + 1) + " / 30")
