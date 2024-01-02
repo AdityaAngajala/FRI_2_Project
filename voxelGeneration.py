@@ -12,6 +12,8 @@ import pyvista as pv
 import os
 import imageio as iio
 
+
+
 from topologyLabelGeneration import generate_terrain, save_color_order
 
 
@@ -297,7 +299,7 @@ def write_hilbert(name='', animate=False, skip=16):
 
     cv2.imwrite('images3D/hilbert/' + 'hilbert' + name + '.png', upscale_image(image, upscale=1))
     if animate:
-        with iio.get_writer("hilbert2D.gif", mode="I", loop=0, duration=0) as writer:
+        with iio.get_writer("hilbert2D_2.gif", mode="I", loop=0, duration=0) as writer:
             for idx, frame in enumerate(frames):
                 print("Adding frame to GIF file: ", idx + 1)
                 writer.append_data(frame)
@@ -547,35 +549,36 @@ def gen_voxels(old_noise, name=None, plotTerrain=False):
 def animate_hilbert(pl=None, grid=None, mesh=None, skip=64):
     # ordered_hilbert = get_ordered_hilbert(mesh=mesh)
 
-    pl.open_gif('hilbert3D.gif')
+    pl.open_gif('hilbert3D_2.gif')
     pl.add_mesh(mesh, show_edges=True, edge_color='gray', cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS],
                 show_scalar_bar=False)
     pl.write_frame()
     pl.clear_actors()
-    current_skip = 2
+    current_skip = 1
     stops = [1]
-    for i in range(1, int(math.log2(skip)) + 1):
-        stops.append( stops[-1] + 2**i)
+    adds = [1]
+    for i in range(1, skip):
+        stops.append(stops[-1] + 1)
+        adds.append(1)
     for i in range(stops[-1] + skip, grid.GetNumberOfCells() - skip, skip):
         stops.append(i)
-    for frame in stops:
-        index = calc_flattened_index(hilbert_x[frame], hilbert_y[frame], hilbert_z[frame])
-        if not np.isnan(data[hilbert_x[frame]][hilbert_y[frame]][hilbert_z[frame]]):
+        adds.append(skip)
+    for stop_num in range(len(stops)):
+        index = calc_flattened_index(hilbert_x[stops[stop_num]], hilbert_y[stops[stop_num]], hilbert_z[stops[stop_num]])
+        if not np.isnan(data [hilbert_x[stops[stop_num]]] [hilbert_y[stops[stop_num]]] [hilbert_z[stops[stop_num]]]):
             subset = grid.extract_cells(range(index, index + 1))
         else:
             subset = grid.extract_cells(range(0, 1))
         for i in range(1, current_skip):
-            if not np.isnan(data[hilbert_x[frame + i]][hilbert_y[frame + i]][hilbert_z[frame + i]]):
-                index = calc_flattened_index(hilbert_x[frame + i], hilbert_y[frame + i], hilbert_z[frame + i])
+            if not np.isnan(data[hilbert_x[stops[stop_num] + i]][hilbert_y[stops[stop_num] + i]][hilbert_z[stops[stop_num] + i]]):
+                index = calc_flattened_index(hilbert_x[stops[stop_num] + i], hilbert_y[stops[stop_num] + i], hilbert_z[stops[stop_num] + i])
                 subset += grid.extract_cells(range(index, index + 1))
         pl.add_mesh(subset, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS],
             show_scalar_bar=False)
         pl.write_frame()
-        print("Frame: " + str(frame))
-        if current_skip < skip:
-            current_skip += 2
-    # mesh.hide_cells(range(ordered_hilbert[index], ordered_hilbert[index]), inplace=True)
-    pl.close()
+        print("Frame: " + str(stops[stop_num]))
+        current_skip = adds[stop_num]
+        pl.close()
 
 
 def calc_flattened_index(x, y, z, size_y=Const.LAND_SIZE, size_z=Const.LAND_SIZE):
@@ -647,7 +650,7 @@ def generate(old_noise=False, clip=False, plotTerrain=False, xCuts=False, yCuts=
     # plot_sparse_stacked(data_sparse, name=name)
     # write_slices(name=name, animate=True)
     # write_expanded_slices(name=name, upscale=8, seperated=False)
-    # write_hilbert(name=name, animate=True)
+    write_hilbert(name=name, animate=True)
     animate_hilbert(pl=pl, grid=grid, mesh=mesh)
     # animate_slices(pl, grid, mesh)
 
