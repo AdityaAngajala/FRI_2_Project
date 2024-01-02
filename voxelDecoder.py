@@ -158,4 +158,4 @@ if __name__ == '__main__':
     data = np.full((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE), np.nan)
 
     for file in get_files(is_dir=False):
-        display_data(file, mode=Mode.SLICES, hsv=False, clip=True)
+        display_data(file, mode=Mode.HILBERT, hsv=False, clip=True)

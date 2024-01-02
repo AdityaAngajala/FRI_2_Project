@@ -71,9 +71,12 @@ def extract_data(image, hsv=False):
     size = Const.LAND_SIZE * Const.UPSCALE
     image_mpl = np.zeros((size, size, 3))
 
+    colorOptionChoice = colorOptionsHSV if hsv else colorOptions
+
     for i in range(size):
         for j in range(size):
             image_mpl[i][j] = cv2_to_mpl(image[i][j])
+            image_mpl[i][j] = colors.ColorConverter.to_rgb(colorOptionChoice[get_index_of_closest_color(image_mpl[i][j], colorOptionChoice, hsv=hsv)])
 
     image_downscale = np.zeros((Const.LAND_SIZE, Const.LAND_SIZE, 3))
 
@@ -83,8 +86,6 @@ def extract_data(image, hsv=False):
 
     # Divide by 'upscale^2' to get the average value for each block
     image_downscale /= (Const.UPSCALE ** 2)
-
-    colorOptionChoice = colorOptionsHSV if hsv else colorOptions
 
     for i in range(Const.LAND_SIZE):
         for j in range(Const.LAND_SIZE):

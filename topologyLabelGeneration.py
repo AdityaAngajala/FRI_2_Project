@@ -11,12 +11,12 @@ import re
 
 
 class Const:
-    LAND_SIZE = 128
+    LAND_SIZE = 256
     MIN_ELEVATION = -192
     MAX_ELEVATION = 191
     NUM_INTERVALS = 24
     NUM_VALS_PER_INTERVAL = math.ceil((MAX_ELEVATION - MIN_ELEVATION + 1) / NUM_INTERVALS)
-    UPSCALE = 4
+    UPSCALE = 2
 
 
 posXOptions = ["left", "center", "right"]
@@ -170,6 +170,15 @@ def reinitialize_color_order():
 
 
 def save_color_order(saveThing=colorOptions):
+    cmap = colors.ListedColormap(saveThing)
+
+    # Save the colormap to a file
+    gradient = np.linspace(0, 1, 384)
+    gradient = np.vstack((gradient, gradient))
+    fig, ax = plt.subplots(1, 1, figsize=(5, 1))
+    ax.imshow(gradient, aspect='auto', cmap=cmap)
+    plt.savefig('images/' + 'colorsPlot.png', bbox_inches='tight', pad_inches=0)
+
     with open("colordump", "wb") as f:
         pickle.dump(saveThing, f)
 
