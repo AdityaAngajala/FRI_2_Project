@@ -17,6 +17,10 @@ voxelDecoder.py contains the code to decode the outputs of voxelGeneration
 
 topologyLabelGeneration.py and encoding_decoder.py contain the 2D variant of the same problem.
 
+Technique Animation:
+![TerrainFinished](https://github.com/AdityaAngajala/FRI_2_Project/assets/53411299/3bec09f8-8dd2-4a07-8a97-1b3aad63f551)
+[![Hilbert](https://drive.google.com/file/d/1ouNW_vHKKVJwDe3VM3rH-znHxNEjCNT9/view?usp=sharing )]
+
 The utils contains:
 - script to generate hilbert indicies
 - GUI to visualize color correction and rounding
