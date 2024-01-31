@@ -17,12 +17,14 @@ voxelDecoder.py contains the code to decode the outputs of voxelGeneration
 
 topologyLabelGeneration.py and encoding_decoder.py contain the 2D variant of the same problem.
 
- Animation:
-![Slices](https://github.com/AdityaAngajala/FRI_2_Project/assets/53411299/3bec09f8-8dd2-4a07-8a97-1b3aad63f551)
-
-![Hilbert](https://github.com/AdityaAngajala/FRI_2_Project/assets/53411299/8ca5a7bf-33f8-46bc-8dec-10acefde963d)
-
 The utils contains:
 - script to generate hilbert indicies
 - GUI to visualize color correction and rounding
 - image augmentation script to test color correctio.  
+
+Animations:
+![Slices](https://github.com/AdityaAngajala/FRI_2_Project/assets/53411299/3bec09f8-8dd2-4a07-8a97-1b3aad63f551)
+
+[Hilbert](https://github.com/AdityaAngajala/FRI_2_Project/assets/53411299/8ca5a7bf-33f8-46bc-8dec-10acefde963d)
+
+
