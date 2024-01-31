@@ -1,6 +1,6 @@
 # Topological Generation using Stable Diffusion - Environment Generator, Encoder, and Decoder
 
-This repo contains the code for the accompanying [research paper ]([url](https://drive.google.com/file/d/1hfSenvkE6SxhtQsS47allLh3wAr-YC-F/view?usp=sharing)). I would highly recommend reading it to better understand the context with which this code is written. 
+This repo contains the code for the accompanying [research paper](https://github.com/AdityaAngajala/FRI_2_Project/files/14118071/Goal_Oriented_3D_Environment_Generation_Final.pdf). I would highly recommend reading it to better understand the context with which this code is written. 
 
 Repo incudes: 
 - Randomized Topological Environment Generator 
