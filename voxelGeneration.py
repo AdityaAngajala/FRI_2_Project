@@ -7,13 +7,10 @@ import vtk
 from matplotlib import pyplot as plt
 from matplotlib import colors
 from pyvista.plotting.opts import PickerType
-from FRI_2_Project.utils.hilbert import gen_coords
+from utils.hilbert import gen_coords
 import pyvista as pv
 import os
 import imageio as iio
-
-
-
 from topologyLabelGeneration import generate_terrain, save_color_order
 
 
@@ -265,35 +262,34 @@ def upscale_voxel(voxel, upscale=1):
 
 
 # Really only works for 64x64x64 because the next size that get you a square image is 256x256x256 which is massive
-def write_hilbert(name='', animate=False, skip=16):
+def write_hilbert(name='', animate=False, skip=64):
     global hilbert_x, hilbert_y, hilbert_z, hilbertX, hilbertY
     image = np.full((round(math.sqrt(Const.LAND_SIZE ** 3)), round(math.sqrt(Const.LAND_SIZE ** 3)), 3), np.nan)
 
     vals = []
     frames = []
-    num = 0
     print(len(image))
     print("HILBER", len(hilbert_x))
-    for i in range(len(image)):
-        for j in range(len(image)):
-            val = data[hilbert_x[num]][hilbert_y[num]][hilbert_z[num]]
-            vals.append(val)
-            if np.isnan(val):
-                image[hilbertX[num]][hilbertY[num]] = (255, 255, 255)
-                if animate and j % skip == 0:
-                    frames.append(np.uint8(image.copy()))
-                    if j % skip == 0:
-                        print(num / len(hilbert_x) * 100)
-            else:
-                image[hilbertX[num]][hilbertY[num]] = colorOutput[np.floor(val).astype(int)]
-                if animate and j % skip == 0:
-                    frames.append(np.uint8(image.copy()))
-                    if j % skip == 0:
-                        print(num / len(hilbert_x) * 100)
+    for i in range(len(image)**2):
+        val = data[hilbert_x[i]][hilbert_y[i]][hilbert_z[i]]
+        vals.append(val)
+        if np.isnan(val):
+            image[hilbertX[i]][hilbertY[i]] = (255, 255, 255)
+            if animate and (i % skip == 0 or i < 64):
+                frames.append(np.uint8(image.copy()))
+                if i % skip == 0:
+                    print(i / len(hilbert_x) * 100)
+        else:
+            image[hilbertX[i]][hilbertY[i]] = colorOutput[np.floor(val).astype(int)]
+            if animate and (i % skip == 0 or i < 64):
+                frames.append(np.uint8(image.copy()))
+                if i % skip == 0:
+                    print(i / len(hilbert_x) * 100)
 
-                # Flipping color channel from RGB to BGR
-                image[hilbertX[num]][hilbertY[num]] = np.flip(image[hilbertX[num]][hilbertY[num]])
-            num += 1
+            # Flipping color channel from RGB to BGR
+            image[hilbertX[i]][hilbertY[i]] = np.flip(image[hilbertX[i]][hilbertY[i]])
+
+
 
     # image = image.reshape(4096, 64, 3)
 
@@ -535,6 +531,8 @@ def gen_voxels(old_noise, name=None, plotTerrain=False):
 
         data = np.full((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE), np.nan).flatten()
 
+
+
         for index in range(len(grid.cell_data['cell_ind'])):
             data[(grid.cell_data['cell_ind'])[index]] = grid.cell_data['Colors'][index]
         data = data.reshape((Const.LAND_SIZE, Const.LAND_SIZE, Const.LAND_SIZE))
@@ -550,35 +548,42 @@ def animate_hilbert(pl=None, grid=None, mesh=None, skip=64):
     # ordered_hilbert = get_ordered_hilbert(mesh=mesh)
 
     pl.open_gif('hilbert3D_2.gif')
-    pl.add_mesh(mesh, show_edges=True, edge_color='gray', cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS],
+    pl.add_mesh(mesh, show_edges=True, edge_color='gray', cmap=init_colors(), scalars='Colors',
+                clim=[0, Const.NUM_COLORS],
                 show_scalar_bar=False)
     pl.write_frame()
     pl.clear_actors()
     current_skip = 1
-    stops = [1]
-    adds = [1]
+    stops = [0]
+    adds = []
     for i in range(1, skip):
         stops.append(stops[-1] + 1)
         adds.append(1)
-    for i in range(stops[-1] + skip, grid.GetNumberOfCells() - skip, skip):
+    for i in range(stops[-1] + 1 + skip, grid.GetNumberOfCells() - skip, skip):
         stops.append(i)
         adds.append(skip)
     for stop_num in range(len(stops)):
         index = calc_flattened_index(hilbert_x[stops[stop_num]], hilbert_y[stops[stop_num]], hilbert_z[stops[stop_num]])
-        if not np.isnan(data [hilbert_x[stops[stop_num]]] [hilbert_y[stops[stop_num]]] [hilbert_z[stops[stop_num]]]):
+
+        if not np.isnan(data[hilbert_x[stops[stop_num]]][hilbert_y[stops[stop_num]]][hilbert_z[stops[stop_num]]]):
             subset = grid.extract_cells(range(index, index + 1))
         else:
             subset = grid.extract_cells(range(0, 1))
         for i in range(1, current_skip):
-            if not np.isnan(data[hilbert_x[stops[stop_num] + i]][hilbert_y[stops[stop_num] + i]][hilbert_z[stops[stop_num] + i]]):
-                index = calc_flattened_index(hilbert_x[stops[stop_num] + i], hilbert_y[stops[stop_num] + i], hilbert_z[stops[stop_num] + i])
+            if not np.isnan(data[hilbert_x[stops[stop_num] + i]][hilbert_y[stops[stop_num] + i]][
+                                hilbert_z[stops[stop_num] + i]]):
+                index = calc_flattened_index(hilbert_x[stops[stop_num] + i], hilbert_y[stops[stop_num] + i],
+                                             hilbert_z[stops[stop_num] + i])
                 subset += grid.extract_cells(range(index, index + 1))
         pl.add_mesh(subset, show_edges=True, cmap=init_colors(), scalars='Colors', clim=[0, Const.NUM_COLORS],
-            show_scalar_bar=False)
+                    show_scalar_bar=False)
         pl.write_frame()
         print("Frame: " + str(stops[stop_num]))
-        current_skip = adds[stop_num]
-        pl.close()
+        try:
+            current_skip = adds[stop_num]
+        except IndexError:
+            continue
+    pl.close()
 
 
 def calc_flattened_index(x, y, z, size_y=Const.LAND_SIZE, size_z=Const.LAND_SIZE):
@@ -617,6 +622,10 @@ def reverse_gif(input_path, output_path):
     reversed_frames = gif[::-1]
     iio.mimsave(output_path, reversed_frames, duration=0.2, loop=0)  # Adjust duration as needed
 
+def flip_gif_colors(input_path, output_path):
+    gif = iio.mimread(input_path)
+    flipped_gif = [frame[:, :, ::-1] for frame in gif]
+    iio.mimsave(output_path, flipped_gif, duration=0, loop=0)
 
 def generate(old_noise=False, clip=False, plotTerrain=False, xCuts=False, yCuts=False, zCuts=False, name="",
              split=False):
@@ -650,14 +659,14 @@ def generate(old_noise=False, clip=False, plotTerrain=False, xCuts=False, yCuts=
     # plot_sparse_stacked(data_sparse, name=name)
     # write_slices(name=name, animate=True)
     # write_expanded_slices(name=name, upscale=8, seperated=False)
-    write_hilbert(name=name, animate=True)
-    animate_hilbert(pl=pl, grid=grid, mesh=mesh)
+    # write_hilbert(name=name, animate=True)
+    # animate_hilbert(pl=pl, grid=grid, mesh=mesh)
     # animate_slices(pl, grid, mesh)
 
 
 if __name__ == '__main__':
-    hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
-    hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
+    # hilbert_x, hilbert_y, hilbert_z = gen_coords(dimSize=3, size_exponent=round(math.log2(Const.LAND_SIZE)))
+    # hilbertX, hilbertY = gen_coords(dimSize=2, size_exponent=9)
     for num in range(1):
         generate(old_noise=True, clip=False, name=str(num), plotTerrain=False, split=False)
         print("PROGRESS: " + str(num + 1) + " / 30")

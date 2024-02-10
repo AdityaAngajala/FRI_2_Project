@@ -7,7 +7,7 @@ import pyvista as pv
 from matplotlib import colors, pyplot as plt
 from pyvista.plotting.opts import PickerType
 
-from FRI_2_Project.utils.hilbert import gen_coords
+from utils.hilbert import gen_coords
 from encoding_decoder import get_files, reinitialize_color_order, cv2_to_mpl, get_index_of_closest_color
 from voxelGeneration import Const, enable_slicing, save_slices, upscale_data
 
